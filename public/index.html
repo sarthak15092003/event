@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jira WorkLog Pro - Team Timesheets & Google Sheets Automation</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            jira: {
+              blue: '#0052CC',
+              dark: '#172B4D',
+              subtle: '#091E420F',
+              border: '#DFE1E6',
+              bg: '#F4F5F7',
+              hover: '#EBECF0',
+              text: '#172B4D',
+              muted: '#6B778C'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #F4F5F7; }
+    ::-webkit-scrollbar-thumb { background: #C1C7D0; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #A5ADBA; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans antialiased min-h-screen flex flex-col">
+
+  <!-- Top Jira Navigation Header -->
+  <header class="bg-jira-dark text-white border-b border-gray-700 px-4 py-2 flex items-center justify-between sticky top-0 z-40 shadow-sm">
+    <div class="flex items-center space-x-6">
+      <div class="flex items-center space-x-2.5 cursor-pointer" onclick="switchTab('board')">
+        <div class="bg-blue-500 w-8 h-8 rounded flex items-center justify-center font-black text-lg text-white">
+          <i class="fa-solid fa-layer-group"></i>
+        </div>
+        <div>
+          <span class="font-bold text-lg tracking-tight">Jira WorkLog</span>
+          <span class="bg-blue-800 text-blue-200 text-[10px] px-1.5 py-0.5 rounded font-mono ml-1">Enterprise</span>
+        </div>
+      </div>
+
+      <nav class="hidden md:flex items-center space-x-1 text-sm font-medium" id="topNav">
+        <button onclick="switchTab('board')" class="px-3 py-1.5 rounded hover:bg-gray-700 transition" id="nav-board">
+          <i class="fa-solid fa-table-columns mr-1.5 text-blue-400"></i> Kanban Board
+        </button>
+        <button onclick="switchTab('worklogs')" class="px-3 py-1.5 rounded hover:bg-gray-700 transition" id="nav-worklogs">
+          <i class="fa-solid fa-clock-rotate-left mr-1.5 text-emerald-400"></i> My Work Logs
+        </button>
+        <button onclick="switchTab('manager')" class="px-3 py-1.5 rounded hover:bg-gray-700 transition relative" id="nav-manager">
+          <i class="fa-solid fa-shield-halved mr-1.5 text-amber-400"></i> Manager Control
+          <span id="pendingBadge" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full"></span>
+        </button>
+        <button onclick="switchTab('automation')" class="px-3 py-1.5 rounded hover:bg-gray-700 transition" id="nav-automation">
+          <i class="fa-solid fa-bolt mr-1.5 text-cyan-400"></i> Sheet Automation
+        </button>
+        <button onclick="switchTab('profile')" class="px-3 py-1.5 rounded hover:bg-gray-700 transition" id="nav-profile">
+          <i class="fa-solid fa-user-gear mr-1.5 text-pink-400"></i> My Profile
+        </button>
+        <button onclick="switchTab('team')" class="px-3 py-1.5 rounded hover:bg-gray-700 transition" id="nav-team">
+          <i class="fa-solid fa-users mr-1.5 text-purple-400"></i> Team Members
+        </button>
+      </nav>
+    </div>
+
+    <div class="flex items-center space-x-3">
+      <!-- Sync with Sheet Button -->
+      <button onclick="triggerSheetSync()" id="quickSyncBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs px-3 py-2 rounded shadow flex items-center transition" title="Sync live with Google Sheet">
+        <i class="fa-solid fa-arrows-rotate mr-1.5" id="syncIcon"></i> <span class="hidden sm:inline">Sync Sheet</span>
+      </button>
+
+      <!-- Quick Create Ticket Button -->
+      <button onclick="openCreateIssueModal()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs px-3 py-2 rounded shadow flex items-center transition">
+        <i class="fa-solid fa-plus mr-1.5"></i> <span class="hidden sm:inline">Create Issue</span>
+      </button>
+
+      <!-- Active User Profile Dropdown / Quick Switch -->
+      <div class="relative group">
+        <button id="userMenuBtn" class="flex items-center space-x-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 px-2.5 py-1.5 rounded transition">
+          <img id="currentUserAvatar" src="" class="w-6 h-6 rounded-full bg-gray-600 border border-gray-500 object-cover" alt="avatar">
+          <span id="currentUserName" class="text-xs font-semibold max-w-[120px] truncate">Loading...</span>
+          <span id="currentUserRoleBadge" class="text-[10px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider"></span>
+          <i class="fa-solid fa-chevron-down text-gray-400 text-xs"></i>
+        </button>
+
+        <!-- Switch user menu -->
+        <div class="hidden group-hover:block absolute right-0 mt-1 w-64 bg-white text-gray-800 rounded shadow-xl border border-gray-200 py-1.5 z-50">
+          <div class="px-3 py-1 border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+            Switch Persona / Team Member
+          </div>
+          <div id="quickUserSwitchList" class="max-h-64 overflow-y-auto">
+            <!-- Populated dynamically with all team members -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Live Sync Notification Banner -->
+  <div id="syncBanner" class="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200 px-4 py-2 text-xs flex flex-wrap items-center justify-between text-blue-900">
+    <div class="flex items-center space-x-2">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+      <span class="font-bold">Google Sheet Live Connection:</span>
+      <span id="syncBannerStatus" class="text-gray-600">Connected to Live Project To-do List (Auto-sync every 10 min)</span>
+    </div>
+    <div class="flex items-center space-x-3">
+      <span id="syncBannerLast" class="text-gray-500 text-[11px]">Last sync: Just now</span>
+      <a href="https://docs.google.com/spreadsheets/d/1OCyP0IwxBu8u9dbJnMhHUtgylPqbd5w1dvCllOQ1sQc/edit?gid=986782709#gid=986782709" target="_blank" class="text-blue-600 hover:underline flex items-center font-medium">
+        <i class="fa-solid fa-arrow-up-right-from-square mr-1"></i> Open Google Sheet
+      </a>
+    </div>
+  </div>
+
+  <!-- Notification Banner / Flash Messages -->
+  <div id="toast" class="fixed bottom-4 right-4 z-50 transform transition duration-300 translate-y-20 opacity-0 bg-gray-900 text-white px-4 py-3 rounded-lg shadow-xl flex items-center space-x-3 text-sm">
+    <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400"></i>
+    <span id="toastMsg">Action completed successfully</span>
+  </div>
+
+  <!-- Main Container -->
+  <main class="flex-1 flex flex-col p-4 md:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- TAB 1: KANBAN BOARD -->
+    <section id="tab-board" class="space-y-4 flex-1 flex flex-col">
+      <!-- Board Subheader & Filters -->
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-3.5 rounded-lg border border-gray-200 shadow-sm">
+        <div class="flex items-center space-x-3">
+          <h2 class="text-lg font-bold text-jira-dark flex items-center">
+            <i class="fa-solid fa-square-kanban text-blue-600 mr-2"></i> Project Events & Tasks Tracker
+          </h2>
+          <span class="bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full font-medium" id="issueCountBadge">0 tasks</span>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <div class="relative">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400"></i>
+            <input type="text" id="boardSearchInput" oninput="filterBoard()" placeholder="Search task or key..." class="pl-8 pr-3 py-1.5 border border-gray-300 rounded focus:outline-none focus:border-blue-500 w-44 md:w-56 text-xs">
+          </div>
+
+          <select id="boardCategoryFilter" onchange="filterBoard()" class="border border-gray-300 rounded px-2.5 py-1.5 focus:outline-none focus:border-blue-500 bg-white">
+            <option value="">All Categories</option>
+          </select>
+
+          <select id="boardAssigneeFilter" onchange="filterBoard()" class="border border-gray-300 rounded px-2.5 py-1.5 focus:outline-none focus:border-blue-500 bg-white">
+            <option value="">All Owners</option>
+          </select>
+          
+          <button onclick="loadBoardData()" class="px-2.5 py-1.5 border border-gray-300 hover:bg-gray-100 rounded text-gray-600 transition" title="Refresh">
+            <i class="fa-solid fa-arrows-rotate"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Kanban Columns -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 flex-1 items-start">
+        <!-- TO DO -->
+        <div class="bg-jira-bg border border-gray-200 rounded-lg p-3 flex flex-col min-h-[500px]">
+          <div class="flex items-center justify-between pb-2 mb-2 border-b border-gray-200">
+            <span class="text-xs font-bold text-gray-600 uppercase tracking-wider">To Do (N/A & Backlog)</span>
+            <span id="col-count-todo" class="bg-gray-200 text-gray-700 text-xs font-semibold px-2 py-0.5 rounded-full">0</span>
+          </div>
+          <div id="col-todo" class="space-y-2.5 flex-1 min-h-[200px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'TO DO')"></div>
+        </div>
+
+        <!-- IN PROGRESS -->
+        <div class="bg-jira-bg border border-gray-200 rounded-lg p-3 flex flex-col min-h-[500px]">
+          <div class="flex items-center justify-between pb-2 mb-2 border-b border-gray-200">
+            <span class="text-xs font-bold text-blue-700 uppercase tracking-wider">In Progress</span>
+            <span id="col-count-inprogress" class="bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-0.5 rounded-full">0</span>
+          </div>
+          <div id="col-inprogress" class="space-y-2.5 flex-1 min-h-[200px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'IN PROGRESS')"></div>
+        </div>
+
+        <!-- IN REVIEW -->
+        <div class="bg-jira-bg border border-gray-200 rounded-lg p-3 flex flex-col min-h-[500px]">
+          <div class="flex items-center justify-between pb-2 mb-2 border-b border-gray-200">
+            <span class="text-xs font-bold text-purple-700 uppercase tracking-wider">In Review</span>
+            <span id="col-count-inreview" class="bg-purple-100 text-purple-800 text-xs font-semibold px-2 py-0.5 rounded-full">0</span>
+          </div>
+          <div id="col-inreview" class="space-y-2.5 flex-1 min-h-[200px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'IN REVIEW')"></div>
+        </div>
+
+        <!-- DONE -->
+        <div class="bg-jira-bg border border-gray-200 rounded-lg p-3 flex flex-col min-h-[500px]">
+          <div class="flex items-center justify-between pb-2 mb-2 border-b border-gray-200">
+            <span class="text-xs font-bold text-emerald-700 uppercase tracking-wider">Completed / Done</span>
+            <span id="col-count-done" class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2 py-0.5 rounded-full">0</span>
+          </div>
+          <div id="col-done" class="space-y-2.5 flex-1 min-h-[200px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'DONE')"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: MY WORK LOGS -->
+    <section id="tab-worklogs" class="hidden space-y-4">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+        <div>
+          <h2 class="text-lg font-bold text-jira-dark flex items-center">
+            <i class="fa-solid fa-clock-rotate-left text-emerald-600 mr-2"></i> Work Logs & Activity
+          </h2>
+          <p class="text-xs text-gray-500">Track and review all your time entries against project tasks.</p>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="openLogWorkModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs px-3.5 py-2 rounded shadow transition flex items-center">
+            <i class="fa-solid fa-stopwatch mr-1.5"></i> Log Work
+          </button>
+        </div>
+      </div>
+
+      <!-- User Worklog summary cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex items-center justify-between">
+          <div>
+            <div class="text-xs font-bold text-gray-400 uppercase">My Total Logged</div>
+            <div class="text-2xl font-black text-gray-800 mt-1" id="myTotalHours">0h</div>
+          </div>
+          <div class="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-lg">
+            <i class="fa-solid fa-clock"></i>
+          </div>
+        </div>
+        <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex items-center justify-between">
+          <div>
+            <div class="text-xs font-bold text-gray-400 uppercase">Approved by Manager</div>
+            <div class="text-2xl font-black text-emerald-600 mt-1" id="myApprovedHours">0h</div>
+          </div>
+          <div class="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg">
+            <i class="fa-solid fa-circle-check"></i>
+          </div>
+        </div>
+        <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex items-center justify-between">
+          <div>
+            <div class="text-xs font-bold text-gray-400 uppercase">Pending Review</div>
+            <div class="text-2xl font-black text-amber-500 mt-1" id="myPendingHours">0h</div>
+          </div>
+          <div class="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center text-lg">
+            <i class="fa-solid fa-hourglass-half"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- Logs Table -->
+      <div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+        <div class="p-3.5 border-b border-gray-200 flex flex-wrap items-center justify-between gap-2">
+          <div class="text-xs font-bold text-gray-600 uppercase tracking-wide">Timesheet Entries</div>
+          <div class="flex items-center space-x-2 text-xs">
+            <select id="myLogStatusFilter" onchange="loadMyWorklogs()" class="border border-gray-300 rounded px-2.5 py-1 text-xs">
+              <option value="">All Statuses</option>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead class="bg-gray-50 border-b border-gray-200 text-gray-500 uppercase font-semibold">
+              <tr>
+                <th class="py-3 px-4">Date</th>
+                <th class="py-3 px-4">Task</th>
+                <th class="py-3 px-4">Time Spent</th>
+                <th class="py-3 px-4">Work Description</th>
+                <th class="py-3 px-4">Status</th>
+                <th class="py-3 px-4">Manager Review</th>
+                <th class="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="myWorklogsTableBody" class="divide-y divide-gray-100">
+              <tr><td colspan="7" class="text-center py-8 text-gray-400">Loading work logs...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: MANAGER CONTROL & TIMESHEET APPROVALS -->
+    <section id="tab-manager" class="hidden space-y-5">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-gradient-to-r from-blue-900 to-indigo-900 text-white p-5 rounded-lg shadow">
+        <div>
+          <div class="flex items-center space-x-2">
+            <span class="bg-amber-400 text-black text-xs font-black uppercase px-2 py-0.5 rounded">Manager Portal</span>
+            <h2 class="text-xl font-bold">Team Timesheets & Worklog Approvals</h2>
+          </div>
+          <p class="text-blue-200 text-xs mt-1">Review team hours, approve or reject work submissions, and monitor project burn rates.</p>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="exportTimesheetCSV()" class="bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs px-3 py-2 rounded font-medium flex items-center transition">
+            <i class="fa-solid fa-file-csv mr-1.5"></i> Export Timesheet
+          </button>
+        </div>
+      </div>
+
+      <!-- Manager Statistics Dashboard -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+          <div class="text-[11px] font-bold text-gray-400 uppercase">Total Team Hours</div>
+          <div class="text-2xl font-black text-gray-800 mt-1" id="mgrTotalHours">0h</div>
+          <div class="text-[11px] text-gray-500 mt-1" id="mgrTotalEntries">0 entries</div>
+        </div>
+        <div class="bg-white p-4 rounded-lg border border-amber-200 bg-amber-50/30 shadow-sm">
+          <div class="text-[11px] font-bold text-amber-600 uppercase">Pending Review</div>
+          <div class="text-2xl font-black text-amber-600 mt-1" id="mgrPendingHours">0h</div>
+          <div class="text-[11px] text-amber-700 mt-1 font-semibold" id="mgrPendingCount">0 pending actions</div>
+        </div>
+        <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+          <div class="text-[11px] font-bold text-emerald-600 uppercase">Approved Hours</div>
+          <div class="text-2xl font-black text-emerald-600 mt-1" id="mgrApprovedHours">0h</div>
+          <div class="text-[11px] text-emerald-700 mt-1">Verified work</div>
+        </div>
+        <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+          <div class="text-[11px] font-bold text-rose-600 uppercase">Rejected Hours</div>
+          <div class="text-2xl font-black text-rose-600 mt-1" id="mgrRejectedHours">0h</div>
+          <div class="text-[11px] text-rose-600 mt-1">Sent back for revision</div>
+        </div>
+      </div>
+
+      <!-- Team Member Hours Breakdown -->
+      <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+        <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3 flex items-center">
+          <i class="fa-solid fa-chart-simple text-blue-600 mr-2"></i> Member Work Breakdown
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3" id="teamMemberBreakdownGrid">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Pending Approval Queue -->
+      <div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+        <div class="p-3.5 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div class="flex items-center space-x-2">
+            <span class="text-xs font-bold text-gray-700 uppercase tracking-wide">Worklog Review Queue</span>
+            <span class="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full" id="reviewQueueBadge">0 Pending</span>
+          </div>
+
+          <div class="flex items-center space-x-2 text-xs">
+            <select id="mgrFilterUser" onchange="loadManagerData()" class="border border-gray-300 rounded px-2.5 py-1 bg-white">
+              <option value="">All Team Members</option>
+            </select>
+            <select id="mgrFilterStatus" onchange="loadManagerData()" class="border border-gray-300 rounded px-2.5 py-1 bg-white">
+              <option value="pending" selected>Only Pending</option>
+              <option value="">All Records</option>
+              <option value="approved">Approved Only</option>
+              <option value="rejected">Rejected Only</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead class="bg-gray-50 border-b border-gray-200 text-gray-500 uppercase font-semibold">
+              <tr>
+                <th class="py-3 px-4">Member</th>
+                <th class="py-3 px-4">Date</th>
+                <th class="py-3 px-4">Task Key & Title</th>
+                <th class="py-3 px-4">Hours</th>
+                <th class="py-3 px-4">Description</th>
+                <th class="py-3 px-4">Current Status</th>
+                <th class="py-3 px-4 text-center">Manager Decision</th>
+              </tr>
+            </thead>
+            <tbody id="mgrWorklogsTableBody" class="divide-y divide-gray-100">
+              <!-- Populated dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: GOOGLE SHEET AUTOMATION -->
+    <section id="tab-automation" class="hidden space-y-4">
+      <div class="bg-white p-5 rounded-lg border border-gray-200 shadow-sm space-y-4">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-gray-100 pb-4">
+          <div>
+            <h2 class="text-lg font-bold text-jira-dark flex items-center">
+              <i class="fa-solid fa-bolt text-cyan-600 mr-2"></i> Google Sheets Live Sync & Automation
+            </h2>
+            <p class="text-xs text-gray-500">Automatically sync tasks, owners, and statuses from your team Google Spreadsheet into Jira WorkLog.</p>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button onclick="triggerSheetSync()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs px-4 py-2 rounded shadow transition flex items-center">
+              <i class="fa-solid fa-rotate mr-1.5"></i> Run Sync Now
+            </button>
+          </div>
+        </div>
+
+        <!-- Automation Status Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="p-3.5 bg-gray-50 rounded border border-gray-200">
+            <div class="text-[11px] font-bold text-gray-400 uppercase">Automation Status</div>
+            <div class="text-base font-bold text-emerald-600 mt-1 flex items-center">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span> Active & Running
+            </div>
+          </div>
+          <div class="p-3.5 bg-gray-50 rounded border border-gray-200">
+            <div class="text-[11px] font-bold text-gray-400 uppercase">Last Sync Timestamp</div>
+            <div class="text-sm font-semibold text-gray-700 mt-1" id="autoLastSyncTime">-</div>
+          </div>
+          <div class="p-3.5 bg-gray-50 rounded border border-gray-200">
+            <div class="text-[11px] font-bold text-gray-400 uppercase">Synced Items</div>
+            <div class="text-base font-bold text-blue-600 mt-1" id="autoSyncCount">51 Tasks Synced</div>
+          </div>
+        </div>
+
+        <!-- Sync Settings Form -->
+        <form onsubmit="saveSyncSettings(event)" class="space-y-3 pt-2 text-xs">
+          <div>
+            <label class="block font-semibold text-gray-700 mb-1">Target Google Spreadsheet URL (public/viewable)</label>
+            <input type="text" id="autoSheetUrl" required class="w-full border border-gray-300 rounded p-2 focus:border-blue-500 font-mono text-xs">
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-700 mb-1">Background Sync Interval (Minutes)</label>
+              <input type="number" min="1" max="1440" id="autoSyncInterval" value="10" class="w-full border border-gray-300 rounded p-2 focus:border-blue-500">
+            </div>
+            <div class="flex items-center pt-5">
+              <label class="inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="autoSyncCheckbox" checked class="form-checkbox h-4 w-4 text-blue-600 rounded">
+                <span class="ml-2 text-xs font-semibold text-gray-700">Enable Automated Background Polling</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="pt-2 flex justify-end">
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs px-4 py-2 rounded shadow transition">
+              Save Automation Settings
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- TAB 5: MY PROFILE & CREDENTIALS -->
+    <section id="tab-profile" class="hidden space-y-4 max-w-2xl mx-auto w-full">
+      <div class="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-6">
+        <div class="flex items-center space-x-4 border-b border-gray-100 pb-5">
+          <img id="profilePageAvatar" src="" class="w-16 h-16 rounded-full border-2 border-blue-500 shadow-sm" alt="Avatar">
+          <div>
+            <h2 class="text-xl font-bold text-jira-dark flex items-center">
+              <span id="profilePageNameHeading">My Profile</span>
+              <span id="profilePageRoleBadge" class="ml-2.5 text-[11px] px-2 py-0.5 rounded font-bold uppercase tracking-wider"></span>
+            </h2>
+            <p class="text-xs text-gray-500 mt-1">Manage your account email, display name, and login credentials.</p>
+          </div>
+        </div>
+
+        <form id="profileUpdateForm" onsubmit="saveProfileChanges(event)" class="space-y-4 text-xs">
+          <div>
+            <label class="block font-semibold text-gray-700 mb-1">Full Name *</label>
+            <input type="text" id="profileInputName" required class="w-full border border-gray-300 rounded-lg p-2.5 focus:border-blue-500 focus:outline-none text-xs">
+          </div>
+
+          <div>
+            <label class="block font-semibold text-gray-700 mb-1">Email Address *</label>
+            <input type="email" id="profileInputEmail" required class="w-full border border-gray-300 rounded-lg p-2.5 focus:border-blue-500 focus:outline-none text-xs font-mono">
+            <span class="text-[11px] text-gray-400 mt-0.5 block">Changing your email updates your login identifier across all worklogs and assignments.</span>
+          </div>
+
+          <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-3">
+            <div class="font-bold text-gray-700 text-xs flex items-center">
+              <i class="fa-solid fa-key mr-2 text-amber-500"></i> Individual Password & Credentials
+            </div>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-gray-600 mb-1 font-medium">New Password</label>
+                <input type="password" id="profileInputPassword" placeholder="Leave blank to keep unchanged" class="w-full border border-gray-300 rounded-lg p-2.5 focus:border-blue-500 focus:outline-none text-xs bg-white">
+              </div>
+              <div>
+                <label class="block text-gray-600 mb-1 font-medium">Current Password in System</label>
+                <div class="flex items-center space-x-2">
+                  <input type="text" id="profileCurrentPasswordHint" readonly class="w-full border border-gray-200 bg-gray-100 rounded-lg p-2.5 text-xs font-mono text-gray-700 select-all" value="••••••••">
+                  <button type="button" onclick="togglePasswordView()" class="px-2.5 py-2 border border-gray-300 bg-white hover:bg-gray-50 rounded-lg text-gray-600" title="Reveal password">
+                    <i class="fa-solid fa-eye" id="togglePassIcon"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-3 flex items-center justify-between">
+            <span class="text-[11px] text-emerald-600 font-medium" id="profileSaveStatusMsg"></span>
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-5 py-2.5 rounded-lg shadow transition flex items-center">
+              <i class="fa-solid fa-floppy-disk mr-2"></i> Save Profile & Credentials
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- TAB 6: TEAM MEMBERS & ACCESS -->
+    <section id="tab-team" class="hidden space-y-4">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+        <div>
+          <h2 class="text-lg font-bold text-jira-dark flex items-center">
+            <i class="fa-solid fa-users-gear text-purple-600 mr-2"></i> Team Directory & Roles
+          </h2>
+          <p class="text-xs text-gray-500">Team members imported from the Google Sheet and platform managers.</p>
+        </div>
+        <div id="addMemberBtnWrapper">
+          <button onclick="openAddUserModal()" class="bg-purple-600 hover:bg-purple-700 text-white font-medium text-xs px-3.5 py-2 rounded shadow transition flex items-center">
+            <i class="fa-solid fa-user-plus mr-1.5"></i> Add New User
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="teamDirectoryGrid">
+        <!-- Rendered dynamically -->
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==================== MODALS ==================== -->
+
+  <!-- ISSUE DETAILS & LOG WORK MODAL -->
+  <div id="issueDetailModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in">
+      <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
+        <div class="flex items-center space-x-2">
+          <span id="modalIssueTypeIcon" class="text-base"></span>
+          <span id="modalIssueKey" class="text-xs font-bold text-gray-500 uppercase tracking-wider"></span>
+          <span id="modalIssueCategory" class="text-[11px] font-semibold bg-gray-200 text-gray-700 px-2 py-0.5 rounded"></span>
+        </div>
+        <button onclick="closeModal('issueDetailModal')" class="text-gray-400 hover:text-gray-600 text-lg">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="p-6 space-y-5 overflow-y-auto flex-1 text-sm">
+        <h3 id="modalIssueTitle" class="text-xl font-bold text-jira-dark"></h3>
+        
+        <div>
+          <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Details & Remarks</div>
+          <p id="modalIssueDesc" class="text-gray-700 bg-gray-50 p-3 rounded-lg border border-gray-100 text-xs whitespace-pre-line"></p>
+        </div>
+
+        <!-- Issue Meta Grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200 text-xs">
+          <div>
+            <span class="text-gray-400 block font-semibold mb-0.5">Owner / Assignee</span>
+            <div id="modalIssueAssignee" class="flex items-center space-x-1.5 font-medium text-gray-800"></div>
+          </div>
+          <div>
+            <span class="text-gray-400 block font-semibold mb-0.5">Reporter</span>
+            <div id="modalIssueReporter" class="flex items-center space-x-1.5 font-medium text-gray-800"></div>
+          </div>
+          <div>
+            <span class="text-gray-400 block font-semibold mb-0.5">Priority</span>
+            <span id="modalIssuePriority" class="font-medium text-gray-800"></span>
+          </div>
+          <div>
+            <span class="text-gray-400 block font-semibold mb-0.5">Original Estimate</span>
+            <span id="modalIssueEstimate" class="font-bold text-gray-800"></span>
+          </div>
+          <div>
+            <span class="text-gray-400 block font-semibold mb-0.5">Logged Hours</span>
+            <span id="modalIssueLogged" class="font-bold text-blue-600"></span>
+          </div>
+          <div>
+            <span class="text-gray-400 block font-semibold mb-0.5">Approved Hours</span>
+            <span id="modalIssueApproved" class="font-bold text-emerald-600"></span>
+          </div>
+          <div class="sm:col-span-2">
+            <span class="text-gray-400 block font-semibold mb-0.5">Status</span>
+            <select id="modalIssueStatusSelect" onchange="updateIssueStatusFromModal()" class="border border-gray-300 rounded px-2 py-1 text-xs bg-white w-full">
+              <option value="TO DO">TO DO</option>
+              <option value="IN PROGRESS">IN PROGRESS</option>
+              <option value="IN REVIEW">IN REVIEW</option>
+              <option value="DONE">DONE</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Worklog Section inside Ticket -->
+        <div class="border-t border-gray-200 pt-4">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="text-xs font-bold text-gray-700 uppercase tracking-wider">
+              <i class="fa-solid fa-clock mr-1 text-blue-600"></i> Work Logged on this Task
+            </h4>
+            <button onclick="openLogWorkModalFromIssue()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-2.5 py-1 rounded transition font-medium">
+              + Log Time
+            </button>
+          </div>
+
+          <div id="modalWorklogsList" class="space-y-2 max-h-48 overflow-y-auto">
+            <!-- Dynamic Worklogs -->
+          </div>
+        </div>
+      </div>
+
+      <div class="px-5 py-3 border-t border-gray-200 bg-gray-50 flex justify-end">
+        <button onclick="closeModal('issueDetailModal')" class="px-4 py-2 border border-gray-300 rounded text-xs font-medium text-gray-700 hover:bg-gray-100">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOG WORK MODAL -->
+  <div id="logWorkModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in">
+      <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between bg-emerald-700 text-white">
+        <h3 class="font-bold text-sm flex items-center">
+          <i class="fa-solid fa-stopwatch mr-2"></i> Log Work Time
+        </h3>
+        <button onclick="closeModal('logWorkModal')" class="text-white/80 hover:text-white">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <form id="logWorkForm" onsubmit="submitWorklog(event)" class="p-5 space-y-4 text-xs">
+        <div>
+          <label class="block font-semibold text-gray-700 mb-1">Select Task *</label>
+          <select id="logWorkIssueSelect" required class="w-full border border-gray-300 rounded p-2 focus:border-emerald-500 focus:outline-none bg-white">
+            <!-- Options populated dynamically -->
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-700 mb-1">Time Spent (Hours) *</label>
+            <input type="number" step="0.25" min="0.1" max="24" id="logWorkHours" required placeholder="e.g. 3.5" class="w-full border border-gray-300 rounded p-2 focus:border-emerald-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-700 mb-1">Date *</label>
+            <input type="date" id="logWorkDate" required class="w-full border border-gray-300 rounded p-2 focus:border-emerald-500 focus:outline-none">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-gray-700 mb-1">Work Description / Details *</label>
+          <textarea id="logWorkDesc" rows="3" required placeholder="What was completed or progressed?" class="w-full border border-gray-300 rounded p-2 focus:border-emerald-500 focus:outline-none"></textarea>
+        </div>
+
+        <div class="bg-amber-50 border border-amber-200 p-2.5 rounded text-[11px] text-amber-800 flex items-start space-x-2">
+          <i class="fa-solid fa-circle-info text-amber-500 mt-0.5"></i>
+          <span>Team members submit work for <strong>Manager Review & Approval</strong>.</span>
+        </div>
+
+        <div class="pt-2 flex justify-end space-x-2">
+          <button type="button" onclick="closeModal('logWorkModal')" class="px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-100 text-gray-600">Cancel</button>
+          <button type="submit" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-medium shadow">Save Work Log</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- CREATE ISSUE MODAL -->
+  <div id="createIssueModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden animate-in fade-in">
+      <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between bg-blue-700 text-white">
+        <h3 class="font-bold text-sm flex items-center">
+          <i class="fa-solid fa-plus-circle mr-2"></i> Create New Issue
+        </h3>
+        <button onclick="closeModal('createIssueModal')" class="text-white/80 hover:text-white">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <form id="createIssueForm" onsubmit="submitNewIssue(event)" class="p-5 space-y-3.5 text-xs">
+        <div>
+          <label class="block font-semibold text-gray-700 mb-1">Task Title *</label>
+          <input type="text" id="createIssueTitle" required placeholder="e.g. Stage Lighting Setup" class="w-full border border-gray-300 rounded p-2 focus:border-blue-500 focus:outline-none">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-700 mb-1">Category / Group</label>
+            <input type="text" id="createIssueCategory" placeholder="e.g. Venue, Creatives, Swags" class="w-full border border-gray-300 rounded p-2 focus:border-blue-500">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-700 mb-1">Priority</label>
+            <select id="createIssuePriority" class="w-full border border-gray-300 rounded p-2 focus:border-blue-500 bg-white">
+              <option value="Highest">Highest</option>
+              <option value="High">High</option>
+              <option value="Medium" selected>Medium</option>
+              <option value="Low">Low</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-700 mb-1">Assignee / Owner</label>
+            <select id="createIssueAssignee" class="w-full border border-gray-300 rounded p-2 focus:border-blue-500 bg-white">
+              <option value="">Unassigned</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-700 mb-1">Reporter *</label>
+            <select id="createIssueReporter" required class="w-full border border-gray-300 rounded p-2 focus:border-blue-500 bg-white">
+              <!-- Populated dynamically with users -->
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-700 mb-1">Issue Type</label>
+            <select id="createIssueType" class="w-full border border-gray-300 rounded p-2 focus:border-blue-500 bg-white">
+              <option value="Task" selected>Task</option>
+              <option value="Story">Story</option>
+              <option value="Bug">Bug</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-700 mb-1">Original Estimate (Hours)</label>
+            <input type="number" step="0.5" min="0" id="createIssueEstimate" placeholder="e.g. 8" class="w-full border border-gray-300 rounded p-2 focus:border-blue-500 focus:outline-none">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-gray-700 mb-1">Description</label>
+          <textarea id="createIssueDesc" rows="3" placeholder="Provide details, acceptance criteria, or requirements..." class="w-full border border-gray-300 rounded p-2 focus:border-blue-500 focus:outline-none"></textarea>
+        </div>
+
+        <div class="pt-2 flex justify-end space-x-2">
+          <button type="button" onclick="closeModal('createIssueModal')" class="px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-100 text-gray-600">Cancel</button>
+          <button type="submit" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium shadow">Create Task</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MANAGER REVIEW MODAL -->
+  <div id="managerReviewModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in">
+      <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between bg-jira-dark text-white">
+        <h3 class="font-bold text-sm flex items-center">
+          <i class="fa-solid fa-gavel mr-2 text-amber-400"></i> Manager Worklog Review
+        </h3>
+        <button onclick="closeModal('managerReviewModal')" class="text-white/80 hover:text-white">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="p-5 space-y-3.5 text-xs">
+        <div id="reviewTargetSummary" class="bg-gray-50 p-3 rounded border border-gray-200"></div>
+
+        <div>
+          <label class="block font-semibold text-gray-700 mb-1">Manager Note / Feedback (Optional)</label>
+          <textarea id="reviewManagerNote" rows="2" placeholder="e.g. Great progress, or please clarify..." class="w-full border border-gray-300 rounded p-2 focus:border-blue-500 focus:outline-none"></textarea>
+        </div>
+
+        <div class="pt-2 flex justify-end space-x-2">
+          <button type="button" onclick="closeModal('managerReviewModal')" class="px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-100 text-gray-600">Cancel</button>
+          <button type="button" onclick="submitManagerDecision('rejected')" class="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded font-medium flex items-center shadow">
+            <i class="fa-solid fa-xmark mr-1.5"></i> Reject
+          </button>
+          <button type="button" onclick="submitManagerDecision('approved')" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-medium flex items-center shadow">
+            <i class="fa-solid fa-check mr-1.5"></i> Approve
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD USER MODAL -->
+  <div id="addUserModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in">
+      <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between bg-purple-700 text-white">
+        <h3 class="font-bold text-sm flex items-center">
+          <i class="fa-solid fa-user-plus mr-2"></i> Add New Team Member
+        </h3>
+        <button onclick="closeModal('addUserModal')" class="text-white/80 hover:text-white">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <form id="addUserForm" onsubmit="submitNewUser(event)" class="p-5 space-y-3.5 text-xs">
+        <div>
+          <label class="block font-semibold text-gray-700 mb-1">Full Name *</label>
+          <input type="text" id="addUserName" required placeholder="e.g. John Doe" class="w-full border border-gray-300 rounded p-2 focus:border-purple-500 focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block font-semibold text-gray-700 mb-1">Email Address *</label>
+          <input type="email" id="addUserEmail" required placeholder="member@jira.local" class="w-full border border-gray-300 rounded p-2 focus:border-purple-500 focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block font-semibold text-gray-700 mb-1">Role Permission *</label>
+          <select id="addUserRole" class="w-full border border-gray-300 rounded p-2 focus:border-purple-500 bg-white">
+            <option value="member" selected>Member (Standard user: can log work, update tasks)</option>
+            <option value="manager">Manager (Has approval rights, team timesheets & reports)</option>
+          </select>
+        </div>
+
+        <div class="pt-2 flex justify-end space-x-2">
+          <button type="button" onclick="closeModal('addUserModal')" class="px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-100 text-gray-600">Cancel</button>
+          <button type="submit" class="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded font-medium shadow">Save User</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js?v=2.1"></script>
+</body>
+</html>
