@@ -6,11 +6,22 @@ import csv
 import io
 import threading
 import time
+import shutil
 from datetime import datetime, date
 from flask import Flask, request, jsonify, send_from_directory
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "database.db")
+# Support Vercel serverless /tmp directory if local directory is read-only
+ORIGINAL_DB_PATH = os.path.join(BASE_DIR, "database.db")
+if os.environ.get("VERCEL"):
+    DB_PATH = "/tmp/database.db"
+    if not os.path.exists(DB_PATH) and os.path.exists(ORIGINAL_DB_PATH):
+        try:
+            shutil.copyfile(ORIGINAL_DB_PATH, DB_PATH)
+        except Exception:
+            pass
+else:
+    DB_PATH = ORIGINAL_DB_PATH
 PUBLIC_DIR = os.path.join(BASE_DIR, "public")
 
 DEFAULT_SHEET_URL = "https://docs.google.com/spreadsheets/d/1OCyP0IwxBu8u9dbJnMhHUtgylPqbd5w1dvCllOQ1sQc/edit?gid=986782709#gid=986782709"
