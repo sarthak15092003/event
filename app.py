@@ -284,17 +284,14 @@ def auto_sync_worker():
         except Exception:
             time.sleep(60)
 
-# Start background sync thread
-threading.Thread(target=auto_sync_worker, daemon=True).start()
-
-# Initialize DB on load
-init_db()
-
-# Run an immediate initial sync
-try:
-    sync_from_sheet(DEFAULT_SHEET_URL)
-except Exception as e:
-    print("Initial sync note:", e)
+# Only run background worker and immediate sync when running as standalone server, not inside serverless cold-start
+if not os.environ.get("VERCEL"):
+    threading.Thread(target=auto_sync_worker, daemon=True).start()
+    try:
+        init_db()
+        sync_from_sheet(DEFAULT_SHEET_URL)
+    except Exception as e:
+        print("Initial sync note:", e)
 
 # ----------------- AUTH & USER HELPERS -----------------
 def get_current_user():
