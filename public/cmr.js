@@ -902,9 +902,22 @@ function openCreateIssueModal() {
   openModal('createIssueModal');
 }
 
+let isSubmittingIssue = false;
+
 async function submitNewIssue(e) {
   e.preventDefault();
-  const title = document.getElementById('createIssueTitle').value;
+  if (isSubmittingIssue) return;
+
+  const submitBtn = document.getElementById('createIssueSubmitBtn');
+  const btnText = document.getElementById('createIssueBtnText');
+
+  const titleInput = document.getElementById('createIssueTitle');
+  const title = titleInput ? titleInput.value.trim() : '';
+  if (!title) {
+    showToast('Task title is required', true);
+    return;
+  }
+
   const project_id = document.getElementById('createIssueProject').value;
   const category = document.getElementById('createIssueCategory').value;
   const priority = document.getElementById('createIssuePriority').value;
@@ -913,6 +926,10 @@ async function submitNewIssue(e) {
   const itype = document.getElementById('createIssueType') ? document.getElementById('createIssueType').value : 'Task';
   const original_estimate_hours = document.getElementById('createIssueEstimate') ? parseFloat(document.getElementById('createIssueEstimate').value) || 0 : 0;
   const description = document.getElementById('createIssueDesc') ? document.getElementById('createIssueDesc').value : '';
+
+  isSubmittingIssue = true;
+  if (submitBtn) submitBtn.disabled = true;
+  if (btnText) btnText.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Creating...';
 
   try {
     const res = await fetch('/api/issues', {
@@ -933,6 +950,10 @@ async function submitNewIssue(e) {
     if (res.ok) {
       closeModal('createIssueModal');
       showToast('Task created successfully');
+      // Reset form fields
+      if (titleInput) titleInput.value = '';
+      const descEl = document.getElementById('createIssueDesc');
+      if (descEl) descEl.value = '';
       await loadIssues();
     } else {
       const err = await res.json();
@@ -940,6 +961,10 @@ async function submitNewIssue(e) {
     }
   } catch (err) {
     showToast('Error creating task', true);
+  } finally {
+    isSubmittingIssue = false;
+    if (submitBtn) submitBtn.disabled = false;
+    if (btnText) btnText.textContent = 'Create Task';
   }
 }
 

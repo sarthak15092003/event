@@ -558,7 +558,9 @@
         </div>
         <div class="flex justify-end space-x-2 pt-2">
           <button type="button" onclick="closeModal('createIssueModal')" class="px-3.5 py-2 border border-slate-200 rounded-lg text-slate-600 font-semibold hover:bg-slate-50">Cancel</button>
-          <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-xs">Create Task</button>
+          <button type="submit" id="createIssueSubmitBtn" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-xs flex items-center">
+            <span id="createIssueBtnText">Create Task</span>
+          </button>
         </div>
       </form>
     </div>
