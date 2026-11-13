@@ -144,122 +144,20 @@ def map_sheet_status(sheet_status):
         # N/A, Pending, To do or empty
         return "TO DO"
 
+OPERATIONAL_TABS = [
+    {"name": "Event & Operation", "gid": "2041394632", "key": "EVT"},
+    {"name": "Creatives", "gid": "1818385189", "key": "CR"},
+    {"name": "Audience Aquisition", "gid": "0", "key": "AUD"},
+    {"name": "Social Media", "gid": "1948818569", "key": "SOC"},
+    {"name": "Event Coverage", "gid": "360894581", "key": "COV"}
+]
+
 def sync_from_sheet(sheet_url=None):
-    conn = get_db()
-    c = conn.cursor()
-    if not sheet_url:
-        row = c.execute("SELECT sheet_url FROM sync_settings WHERE id = 1").fetchone()
-        sheet_url = row["sheet_url"] if row else DEFAULT_SHEET_URL
-
-    csv_url = extract_csv_export_url(sheet_url)
+    from sync_all_operational_tabs import sync_all_operational_tabs
     try:
-        req = urllib.request.Request(csv_url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=12) as resp:
-            content = resp.read().decode("utf-8")
-
-        reader = list(csv.reader(io.StringIO(content)))
-        rows = reader
-
-        # Extract Project Name from Row 0
-        event_name = rows[0][0].strip() if len(rows) > 0 and len(rows[0]) > 0 and rows[0][0].strip() else "Amazon Connect Event Bangalore"
-        
-        # Ensure project exists
-        c.execute("SELECT id, key FROM projects WHERE key = 'AMZ' OR name LIKE '%Amazon%'")
-        proj = c.fetchone()
-        if not proj:
-            c.execute("INSERT INTO projects (key, name, description, created_by) VALUES ('AMZ', ?, 'Imported from Google Sheet gid=986782709', 1)", (event_name,))
-            c.execute("SELECT id, key FROM projects WHERE key = 'AMZ'")
-            proj = c.fetchone()
-        
-        proj_id = proj["id"]
-        proj_key = proj["key"]
-
-        # Parse tasks
-        current_category = "General"
-        imported_count = 0
-        updated_count = 0
-
-        # Scan and ensure users exist
-        user_cache = {}
-        for u in c.execute("SELECT id, name FROM users").fetchall():
-            user_cache[u["name"].strip().lower()] = u["id"]
-
-        # Scan and find an existing active manager or user for reporting
-        manager_row = c.execute("SELECT id FROM users WHERE role = 'manager' ORDER BY id ASC LIMIT 1").fetchone()
-        if not manager_row:
-            manager_row = c.execute("SELECT id FROM users ORDER BY id ASC LIMIT 1").fetchone()
-        manager_id = manager_row["id"] if manager_row else 1
-
-        for idx, r in enumerate(rows):
-            if idx < 5:  # Skip headers
-                continue
-            cat = r[0].strip() if len(r) > 0 else ""
-            details = r[1].strip() if len(r) > 1 else ""
-            status_raw = r[2].strip() if len(r) > 2 else ""
-            owner_raw = r[3].strip() if len(r) > 3 else ""
-            remarks_raw = r[4].strip() if len(r) > 4 else ""
-
-            if cat:
-                current_category = cat
-            if not details:
-                continue
-
-            # Assignee mapping
-            assignee_id = None
-            if owner_raw:
-                owner_clean = owner_raw.strip()
-                owner_key = owner_clean.lower()
-                if owner_key not in user_cache:
-                    email = f"{owner_key.replace(' ', '.')}@cybermedia.co.in"
-                    avatar = f"https://api.dicebear.com/7.x/avataaars/svg?seed={owner_clean}"
-                    c.execute("INSERT INTO users (name, email, role, avatar) VALUES (?, ?, 'member', ?)", (owner_clean, email, avatar))
-                    c.execute("SELECT id FROM users WHERE email = ?", (email,))
-                    u_row = c.fetchone()
-                    assignee_id = u_row["id"] if u_row else None
-                    user_cache[owner_key] = assignee_id
-                else:
-                    assignee_id = user_cache[owner_key]
-
-            mapped_status = map_sheet_status(status_raw)
-
-            # Check if this issue exists (match title & project)
-            c.execute("SELECT id, issue_key, status FROM issues WHERE project_id = ? AND title = ?", (proj_id, details))
-            existing = c.fetchone()
-
-            if existing:
-                c.execute("""
-                    UPDATE issues 
-                    SET category = ?, remarks = ?, assignee_id = ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                """, (current_category, remarks_raw, assignee_id, existing["id"]))
-                updated_count += 1
-            else:
-                imported_count += 1
-                seq = 100 + imported_count + updated_count
-                issue_key = f"{proj_key}-{seq}"
-                
-                priority = "Highest" if "venue" in current_category.lower() or "contract" in details.lower() else "Medium"
-                estimate = 8.0 if mapped_status == "DONE" else 4.0
-
-                c.execute("""
-                    INSERT INTO issues (issue_key, project_id, category, title, description, type, status, priority, assignee_id, reporter_id, original_estimate_hours, remarks, source)
-                    VALUES (?, ?, ?, ?, ?, 'Task', ?, ?, ?, ?, ?, ?, 'sheet')
-                """, (issue_key, proj_id, current_category, details, f"Category: {current_category}\nRemarks: {remarks_raw}", mapped_status, priority, assignee_id, manager_id, estimate, remarks_raw))
-
-        c.execute("""
-            UPDATE sync_settings 
-            SET last_sync_at = CURRENT_TIMESTAMP, 
-                last_sync_status = 'Success', 
-                last_sync_count = ?
-            WHERE id = 1
-        """, (imported_count + updated_count,))
-        conn.commit()
-        conn.close()
-        return {"status": "success", "imported": imported_count, "updated": updated_count}
+        sync_all_operational_tabs()
+        return {"status": "success", "message": "All operational tabs synced cleanly"}
     except Exception as e:
-        c.execute("UPDATE sync_settings SET last_sync_status = ? WHERE id = 1", (f"Error: {str(e)}",))
-        conn.commit()
-        conn.close()
         return {"status": "error", "message": str(e)}
 
 # Background periodic auto-sync automation worker
