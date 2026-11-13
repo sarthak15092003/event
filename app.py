@@ -157,17 +157,22 @@ def sync_from_sheet(sheet_url=None):
         with urllib.request.urlopen(req, timeout=12) as resp:
             content = resp.read().decode("utf-8")
 
-        reader = csv.reader(io.StringIO(content))
-        rows = list(reader)
+        reader = list(csv.reader(io.StringIO(content)))
+        rows = reader
 
-        # Ensure project exists for Aeonx Google Sheet Tracker
-        c.execute("SELECT id FROM projects WHERE key = 'AEONX'")
+        # Extract Project Name from Row 0
+        event_name = rows[0][0].strip() if len(rows) > 0 and len(rows[0]) > 0 and rows[0][0].strip() else "Amazon Connect Event Bangalore"
+        
+        # Ensure project exists
+        c.execute("SELECT id, key FROM projects WHERE key = 'AMZ' OR name LIKE '%Amazon%'")
         proj = c.fetchone()
         if not proj:
-            c.execute("INSERT INTO projects (key, name, description, created_by) VALUES ('AEONX', 'Aeonx Digital Events', 'Imported from Google Sheets Live Tracker', 1)")
-            proj_id = c.lastrowid
-        else:
-            proj_id = proj["id"]
+            c.execute("INSERT INTO projects (key, name, description, created_by) VALUES ('AMZ', ?, 'Imported from Google Sheet gid=986782709', 1)", (event_name,))
+            c.execute("SELECT id, key FROM projects WHERE key = 'AMZ'")
+            proj = c.fetchone()
+        
+        proj_id = proj["id"]
+        proj_key = proj["key"]
 
         # Parse tasks
         current_category = "General"
@@ -180,10 +185,10 @@ def sync_from_sheet(sheet_url=None):
             user_cache[u["name"].strip().lower()] = u["id"]
 
         # If manager doesn't exist, create default
-        if "alex manager" not in user_cache:
+        if "alex manager" not in user_cache and "manager" not in user_cache:
             c.execute("INSERT INTO users (name, email, role, avatar) VALUES ('Alex Manager', 'manager@jira.local', 'manager', 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex')")
             user_cache["alex manager"] = c.lastrowid
-        manager_id = user_cache["alex manager"]
+        manager_id = user_cache.get("alex manager", 1)
 
         for idx, r in enumerate(rows):
             if idx < 5:  # Skip headers
@@ -205,11 +210,15 @@ def sync_from_sheet(sheet_url=None):
                 owner_clean = owner_raw.strip()
                 owner_key = owner_clean.lower()
                 if owner_key not in user_cache:
-                    email = f"{owner_key.replace(' ', '.')}@jira.local"
+                    email = f"{owner_key.replace(' ', '.')}@cybermedia.co.in"
                     avatar = f"https://api.dicebear.com/7.x/avataaars/svg?seed={owner_clean}"
                     c.execute("INSERT INTO users (name, email, role, avatar) VALUES (?, ?, 'member', ?)", (owner_clean, email, avatar))
-                    user_cache[owner_key] = c.lastrowid
-                assignee_id = user_cache[owner_key]
+                    c.execute("SELECT id FROM users WHERE email = ?", (email,))
+                    u_row = c.fetchone()
+                    assignee_id = u_row["id"] if u_row else None
+                    user_cache[owner_key] = assignee_id
+                else:
+                    assignee_id = user_cache[owner_key]
 
             mapped_status = map_sheet_status(status_raw)
 
@@ -218,7 +227,6 @@ def sync_from_sheet(sheet_url=None):
             existing = c.fetchone()
 
             if existing:
-                # Update status, assignee, remarks if changed
                 c.execute("""
                     UPDATE issues 
                     SET category = ?, remarks = ?, assignee_id = ?, updated_at = CURRENT_TIMESTAMP
@@ -228,9 +236,8 @@ def sync_from_sheet(sheet_url=None):
             else:
                 imported_count += 1
                 seq = 100 + imported_count + updated_count
-                issue_key = f"AEONX-{seq}"
+                issue_key = f"{proj_key}-{seq}"
                 
-                # Priority inference
                 priority = "Highest" if "venue" in current_category.lower() or "contract" in details.lower() else "Medium"
                 estimate = 8.0 if mapped_status == "DONE" else 4.0
 
@@ -238,19 +245,6 @@ def sync_from_sheet(sheet_url=None):
                     INSERT INTO issues (issue_key, project_id, category, title, description, type, status, priority, assignee_id, reporter_id, original_estimate_hours, remarks, source)
                     VALUES (?, ?, ?, ?, ?, 'Task', ?, ?, ?, ?, ?, ?, 'sheet')
                 """, (issue_key, proj_id, current_category, details, f"Category: {current_category}\nRemarks: {remarks_raw}", mapped_status, priority, assignee_id, manager_id, estimate, remarks_raw))
-                new_issue_id = c.lastrowid
-
-                # If status is DONE or In Progress, seed a sample initial worklog so timesheets reflect active sheet work
-                if mapped_status == "DONE" and assignee_id:
-                    c.execute("""
-                        INSERT INTO worklogs (issue_id, user_id, time_spent_hours, work_date, description, status, reviewed_by, reviewed_at)
-                        VALUES (?, ?, 6.0, date('now'), 'Completed milestone as per Sheet sync', 'approved', ?, CURRENT_TIMESTAMP)
-                    """, (new_issue_id, assignee_id, manager_id))
-                elif mapped_status == "IN PROGRESS" and assignee_id:
-                    c.execute("""
-                        INSERT INTO worklogs (issue_id, user_id, time_spent_hours, work_date, description, status)
-                        VALUES (?, ?, 3.5, date('now'), 'In progress ongoing work', 'pending')
-                    """, (new_issue_id, assignee_id))
 
         c.execute("""
             UPDATE sync_settings 
