@@ -28,7 +28,13 @@ DEFAULT_SHEET_URL = "https://docs.google.com/spreadsheets/d/1OCyP0IwxBu8u9dbJnMh
 
 app = Flask(__name__, static_folder=PUBLIC_DIR, static_url_path="")
 
+# Check if Turso Cloud Database is configured
+TURSO_ENABLED = bool(os.environ.get("TURSO_DATABASE_URL") or os.environ.get("TURSO_AUTH_TOKEN"))
+
 def get_db():
+    if TURSO_ENABLED:
+        from turso_db import get_turso_db
+        return get_turso_db()
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
