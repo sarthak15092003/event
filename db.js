@@ -70,15 +70,14 @@ const userCount = db.prepare('SELECT count(*) as count FROM users').get().count;
 if (userCount === 0) {
   const hash = bcrypt.hashSync('password123', 10);
   
-  // Manager
   const insertUser = db.prepare(`
     INSERT INTO users (name, email, password, role, avatar)
     VALUES (?, ?, ?, ?, ?)
   `);
   
-  const mId = insertUser.run('Alex Manager', 'manager@jira.local', hash, 'manager', 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex').lastInsertRowid;
-  const d1Id = insertUser.run('Sarah Developer', 'sarah@jira.local', hash, 'member', 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah').lastInsertRowid;
-  const d2Id = insertUser.run('David Engineer', 'david@jira.local', hash, 'member', 'https://api.dicebear.com/7.x/avataaars/svg?seed=David').lastInsertRowid;
+  const mId = insertUser.run('Ankit Parashar', 'ankit.parashar@jira.local', hash, 'manager', 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ankit').lastInsertRowid;
+  const d1Id = insertUser.run('Bibhuti', 'bibhuti@jira.local', hash, 'member', 'https://api.dicebear.com/7.x/avataaars/svg?seed=Bibhuti').lastInsertRowid;
+  const d2Id = insertUser.run('Sunali', 'sunali@jira.local', hash, 'member', 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sunali').lastInsertRowid;
 
   // Insert Project
   const insertProject = db.prepare(`INSERT INTO projects (key, name, description, created_by) VALUES (?, ?, ?, ?)`);
