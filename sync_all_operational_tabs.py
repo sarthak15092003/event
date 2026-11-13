@@ -45,10 +45,9 @@ def sync_all_operational_tabs():
             c.execute("SELECT id FROM users WHERE email = ?", (email,))
             user_map[name.lower()] = c.fetchone()["id"]
 
-    # Clear previous issues from sheet imports across projects
+    # Clear previous worklogs and issues
     c.execute("DELETE FROM worklogs")
     c.execute("DELETE FROM issues")
-    c.execute("DELETE FROM projects")
 
     total_tasks_synced = 0
 
@@ -57,18 +56,21 @@ def sync_all_operational_tabs():
         tab_gid = tab["gid"]
         tab_key = tab["key"]
 
-        # Create project for this operational sheet tab
-        c.execute("INSERT INTO projects (key, name, description, created_by) VALUES (?, ?, ?, ?)",
-                  (tab_key, tab_name, f"Imported strictly from Google Sheet tab '{tab_name}' (gid={tab_gid})", 1))
+        # Ensure project exists (or reuse existing)
         c.execute("SELECT id FROM projects WHERE key = ?", (tab_key,))
-        proj_id = c.fetchone()["id"]
+        proj_row = c.fetchone()
+        if not proj_row:
+            c.execute("INSERT INTO projects (key, name, description, created_by) VALUES (?, ?, ?, 1)",
+                      (tab_key, tab_name, f"Google Sheet tab '{tab_name}'"))
+            c.execute("SELECT id FROM projects WHERE key = ?", (tab_key,))
+            proj_row = c.fetchone()
+        proj_id = proj_row["id"]
 
         url = f"https://docs.google.com/spreadsheets/d/1OCyP0IwxBu8u9dbJnMhHUtgylPqbd5w1dvCllOQ1sQc/export?format=csv&gid={tab_gid}"
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         content = urllib.request.urlopen(req).read().decode('utf-8')
         reader = list(csv.reader(io.StringIO(content)))
 
-        # Header is row 0: ['Task', 'Status', 'Owner', 'Stage', 'Due date', 'Notes']
         task_seq = 0
         for idx, row in enumerate(reader):
             if idx == 0:
@@ -107,14 +109,12 @@ def sync_all_operational_tabs():
                 elif owner_str in user_map:
                     assignee_id = user_map[owner_str]
                 else:
-                    # Create user on the fly if needed
                     c.execute("INSERT INTO users (name, email, role, avatar) VALUES (?, ?, 'member', ?)",
                               (owner_raw.strip(), f"{owner_str.replace(' ', '.')}@cybermedia.co.in", f"https://api.dicebear.com/7.x/avataaars/svg?seed={owner_raw}"))
                     c.execute("SELECT id FROM users WHERE email = ?", (f"{owner_str.replace(' ', '.')}@cybermedia.co.in",))
                     assignee_id = c.fetchone()["id"]
                     user_map[owner_str] = assignee_id
             else:
-                # Unassigned default or stage lead
                 if tab_key in ["SOC", "COV"]:
                     assignee_id = user_map.get("bibhuti")
 
@@ -126,7 +126,7 @@ def sync_all_operational_tabs():
                 VALUES (?, ?, ?, ?, ?, 'Task', ?, ?, ?, 1, 4.0, ?, 'sheet')
             """, (issue_key, proj_id, category, task_title, desc, status, priority, assignee_id, remarks))
 
-        print(f"Synced {task_seq} tasks for tab '{tab_name}' ({tab_key}) in exact Excel row order.")
+        print(f"Synced {task_seq} tasks for tab '{tab_name}' ({tab_key})")
 
     # Update sync_settings
     c.execute("""
@@ -137,9 +137,8 @@ def sync_all_operational_tabs():
         WHERE id = 1
     """, (total_tasks_synced,))
 
-    print(f"\nALL 5 OPERATIONAL TABS SYNCED: Total {total_tasks_synced} tasks. Index tab excluded!")
+    print(f"\nALL 5 OPERATIONAL TABS SYNCED: Total {total_tasks_synced} tasks.")
     conn.close()
 
 if __name__ == "__main__":
     sync_all_operational_tabs()
-
