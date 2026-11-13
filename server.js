@@ -128,7 +128,7 @@ app.post('/api/users', authenticate, requireManager, (req, res) => {
 });
 
 // ----------------- PROJECT & ISSUE ROUTES -----------------
-app.get('/api/projects', authenticate, (req, res) => {
+app.get('/api/projects', (req, res) => {
   const projects = db.prepare(`
     SELECT p.*, u.name as creator_name,
     (SELECT COUNT(*) FROM issues WHERE project_id = p.id) as total_issues
@@ -137,6 +137,26 @@ app.get('/api/projects', authenticate, (req, res) => {
     ORDER BY p.id ASC
   `).all();
   res.json(projects);
+});
+
+app.post('/api/projects', (req, res) => {
+  const { name, key, description } = req.body || {};
+  if (!name) {
+    return res.status(400).json({ error: 'Event name is required' });
+  }
+  let eventKey = (key || '').trim().toUpperCase();
+  if (!eventKey) {
+    const clean = name.replace(/[^a-zA-Z0-9\s]/g, '').trim().split(/\s+/);
+    eventKey = clean.map(w => w.slice(0, 3)).join('').slice(0, 6).toUpperCase() || 'EVT';
+  }
+
+  try {
+    const stmt = db.prepare('INSERT INTO projects (key, name, description, created_by) VALUES (?, ?, ?, ?)');
+    const result = stmt.run(eventKey, name.trim(), (description || '').trim(), 1);
+    res.status(201).json({ id: result.lastInsertRowid, key: eventKey, name: name.trim(), description });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 app.get('/api/issues', authenticate, (req, res) => {

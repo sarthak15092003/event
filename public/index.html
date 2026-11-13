@@ -468,7 +468,12 @@
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block font-semibold text-slate-700 mb-1">Event / Project *</label>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block font-semibold text-slate-700">Event / Project *</label>
+              <button type="button" onclick="openNewProjectModal()" class="text-blue-600 hover:text-blue-700 font-bold text-[11px] flex items-center">
+                <i class="fa-solid fa-plus mr-1"></i> New Event
+              </button>
+            </div>
             <select id="createIssueProject" class="w-full border border-slate-300 rounded-lg p-2.5 bg-white font-medium"></select>
           </div>
           <div>
@@ -516,6 +521,37 @@
         <div class="flex justify-end space-x-2 pt-2">
           <button type="button" onclick="closeModal('createIssueModal')" class="px-3.5 py-2 border border-slate-200 rounded-lg text-slate-600 font-semibold hover:bg-slate-50">Cancel</button>
           <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-xs">Create Task</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Create New Event Modal -->
+  <div id="newProjectModal" class="fixed inset-0 bg-black/60 z-[60] hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden text-xs">
+      <div class="px-5 py-3.5 border-b border-indigo-600 bg-indigo-600 text-white flex justify-between items-center">
+        <span class="font-bold text-sm flex items-center"><i class="fa-solid fa-calendar-plus mr-2"></i> Add New Event</span>
+        <button onclick="closeModal('newProjectModal')" class="text-white/80 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form onsubmit="submitNewProject(event)" class="p-5 space-y-3.5">
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Event Name *</label>
+          <input type="text" id="newProjectName" required class="w-full border border-slate-300 rounded-lg p-2.5" placeholder="e.g. CyberMedia Tech Summit 2026">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Event Code / Key</label>
+            <input type="text" id="newProjectKey" maxlength="8" class="w-full border border-slate-300 rounded-lg p-2.5 uppercase font-mono" placeholder="e.g. TECH26">
+            <span class="text-[10px] text-slate-400 block mt-0.5">Auto-generated if empty</span>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Description (Optional)</label>
+            <input type="text" id="newProjectDesc" class="w-full border border-slate-300 rounded-lg p-2.5" placeholder="Brief note">
+          </div>
+        </div>
+        <div class="flex justify-end space-x-2 pt-2">
+          <button type="button" onclick="closeModal('newProjectModal')" class="px-3.5 py-2 border border-slate-200 rounded-lg text-slate-600 font-semibold hover:bg-slate-50">Cancel</button>
+          <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-xs">Save Event</button>
         </div>
       </form>
     </div>

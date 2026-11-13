@@ -563,6 +563,44 @@ async function triggerSheetSync() {
 }
 
 // Modals
+function openNewProjectModal() {
+  document.getElementById('newProjectName').value = '';
+  document.getElementById('newProjectKey').value = '';
+  document.getElementById('newProjectDesc').value = '';
+  openModal('newProjectModal');
+}
+
+async function submitNewProject(e) {
+  e.preventDefault();
+  const name = document.getElementById('newProjectName').value.trim();
+  const key = document.getElementById('newProjectKey').value.trim().toUpperCase();
+  const description = document.getElementById('newProjectDesc').value.trim();
+
+  if (!name) return;
+
+  try {
+    const res = await fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
+      body: JSON.stringify({ name, key, description })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(`Event "${name}" added!`);
+      closeModal('newProjectModal');
+      await loadProjects();
+      const projSelect = document.getElementById('createIssueProject');
+      if (projSelect && data.id) {
+        projSelect.value = data.id;
+      }
+    } else {
+      showToast(data.error || 'Failed to add event', true);
+    }
+  } catch (err) {
+    showToast('Failed to add event', true);
+  }
+}
+
 function openCreateIssueModal() {
   const projSelect = document.getElementById('createIssueProject');
   if (projSelect && allProjects.length > 0 && projSelect.children.length === 0) {
