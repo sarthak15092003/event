@@ -14,16 +14,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   await loadUsers();
   await loadProjects();
+  await loadIssues();
   
-  // Safe login fallback to Ankit or first user
+  // Safe login fallback
   let targetEmail = currentToken;
   const exists = allUsers.some(u => u.email.toLowerCase() === (targetEmail || '').toLowerCase());
   if (!exists && allUsers.length > 0) {
     targetEmail = allUsers[0].email;
   }
-  await loginAs(targetEmail || 'ankit.parashar@jira.local');
+  await loginAs(targetEmail || (allUsers.length > 0 ? allUsers[0].email : ''));
   
-  await loadIssues();
   switchNav('my-tasks');
 });
 
@@ -223,8 +223,12 @@ function renderWorkbenchDeliverables() {
   const emptyState = document.getElementById('workbenchEmptyState');
   const search = (document.getElementById('workbenchSearch').value || '').toLowerCase();
 
-  // Filter tasks assigned to current user
-  const myAssigned = allIssues.filter(i => i.assignee_id === currentUser.id);
+  // Filter tasks assigned to current user (or co-owned in remarks)
+  const myAssigned = allIssues.filter(i => {
+    if (i.assignee_id === currentUser.id) return true;
+    if (currentUser.name && i.remarks && i.remarks.toLowerCase().includes(currentUser.name.toLowerCase())) return true;
+    return false;
+  });
 
   // Compute Metrics
   let awaitingApprovalCount = 0;
