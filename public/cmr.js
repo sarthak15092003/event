@@ -260,7 +260,12 @@ function renderWorkbenchDeliverables() {
             <div class="flex items-center space-x-2">
               <span class="font-bold text-xs text-blue-600">${item.issue_key}</span>
               <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded font-medium">${item.category || 'Operations'}</span>
-              <span class="text-[10px] font-bold px-2 py-0.2 rounded uppercase ${getStatusBadgeClass(item.status)}">${item.status}</span>
+              <select onchange="updateDeliverableStatus(${item.id}, this.value)" class="text-[10px] font-bold px-2 py-0.5 rounded uppercase border border-slate-200 cursor-pointer outline-none transition ${getStatusBadgeClass(item.status)}">
+                <option value="TO DO" ${item.status === 'TO DO' ? 'selected' : ''}>TO DO</option>
+                <option value="IN PROGRESS" ${item.status === 'IN PROGRESS' ? 'selected' : ''}>IN PROGRESS</option>
+                <option value="IN REVIEW" ${item.status === 'IN REVIEW' ? 'selected' : ''}>IN REVIEW</option>
+                <option value="DONE" ${item.status === 'DONE' ? 'selected' : ''}>DONE</option>
+              </select>
             </div>
             <h4 class="font-bold text-sm text-slate-900 mt-0.5">${escapeHtml(item.title)}</h4>
             ${item.remarks ? `<p class="text-[11px] text-amber-700 mt-0.5">Note: ${escapeHtml(item.remarks)}</p>` : ''}
@@ -349,6 +354,24 @@ function renderBoard() {
 }
 
 function allowDrop(ev) { ev.preventDefault(); }
+
+async function updateDeliverableStatus(issueId, newStatus) {
+  try {
+    const res = await fetch(`/api/issues/${issueId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
+      body: JSON.stringify({ status: newStatus })
+    });
+    if (res.ok) {
+      showToast(`Status updated to ${newStatus}`);
+      await loadIssues();
+    } else {
+      showToast('Failed to update status', true);
+    }
+  } catch (err) {
+    showToast('Failed to update status', true);
+  }
+}
 
 async function handleDrop(ev, newStatus) {
   ev.preventDefault();
