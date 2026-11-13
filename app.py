@@ -517,6 +517,36 @@ def issues_endpoint():
         conn.commit()
         new_id = c.lastrowid
         conn.close()
+
+        # Safely append to Google Sheet via Apps Script webhook without touching or overriding existing rows
+        apps_script_url = os.environ.get("GOOGLE_APPS_SCRIPT_URL", "https://script.google.com/macros/s/AKfycbyeZYEPldAN85bQvXDqVBa2rRhQddFsdM6Ie_yIGNLsk-Yy7dhpXWvUc4p3P_Bnd_Hm0A/exec")
+        if apps_script_url:
+            try:
+                owner_name = "Unassigned"
+                if assignee_id:
+                    u_conn = get_db()
+                    u_row = u_conn.execute("SELECT name FROM users WHERE id = ?", (assignee_id,)).fetchone()
+                    u_conn.close()
+                    if u_row:
+                        owner_name = u_row["name"]
+
+                append_payload = json.dumps({
+                    "category": category,
+                    "title": title,
+                    "status": "TO DO",
+                    "owner": owner_name,
+                    "remarks": desc or ""
+                }).encode("utf-8")
+                append_req = urllib.request.Request(
+                    apps_script_url,
+                    data=append_payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST"
+                )
+                urllib.request.urlopen(append_req, timeout=5)
+            except Exception as sheet_err:
+                print("Note: Google Sheet append note:", sheet_err)
+
         return jsonify({"id": new_id, "issue_key": key}), 201
 
     query = """
