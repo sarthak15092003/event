@@ -198,7 +198,9 @@ app.get('/api/issues', authenticate, (req, res) => {
     params.push(`%${search}%`, `%${search}%`, `%${search}%`);
   }
 
-  query += ' ORDER BY i.id ASC';
+  query += ` ORDER BY 
+    CASE WHEN i.source = 'app' THEN 0 ELSE 1 END ASC,
+    CASE WHEN i.source = 'app' THEN -i.id ELSE i.id END ASC`;
   const issues = db.prepare(query).all(...params);
   res.json(issues);
 });
