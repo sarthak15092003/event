@@ -144,6 +144,10 @@ def map_sheet_status(sheet_status):
         # N/A, Pending, To do or empty
         return "TO DO"
 
+# Global Master Switch for Sheet Synchronization
+# Set to True whenever you want to re-enable Google Sheet sync from code
+ENABLE_SHEET_SYNC = False
+
 OPERATIONAL_TABS = [
     {"name": "Event & Operation", "gid": "2041394632", "key": "EVT"},
     {"name": "Creatives", "gid": "1818385189", "key": "CR"},
@@ -152,7 +156,9 @@ OPERATIONAL_TABS = [
     {"name": "Event Coverage", "gid": "360894581", "key": "COV"}
 ]
 
-def sync_from_sheet(sheet_url=None):
+def sync_from_sheet(sheet_url=None, force=False):
+    if not ENABLE_SHEET_SYNC and not force:
+        return {"status": "paused", "message": "Sheet sync is temporarily paused. Set ENABLE_SHEET_SYNC = True in app.py or toggle Sync on to resume."}
     from sync_all_operational_tabs import sync_all_operational_tabs
     try:
         sync_all_operational_tabs()
@@ -164,6 +170,9 @@ def sync_from_sheet(sheet_url=None):
 def auto_sync_worker():
     while True:
         try:
+            if not ENABLE_SHEET_SYNC:
+                time.sleep(60)
+                continue
             conn = get_db()
             row = conn.execute("SELECT auto_sync_enabled, sync_interval_mins, sheet_url FROM sync_settings WHERE id = 1").fetchone()
             conn.close()
@@ -179,11 +188,12 @@ def auto_sync_worker():
 # Only run background worker and immediate sync when running as standalone server, not inside serverless cold-start
 if not os.environ.get("VERCEL"):
     threading.Thread(target=auto_sync_worker, daemon=True).start()
-    try:
-        init_db()
-        sync_from_sheet(DEFAULT_SHEET_URL)
-    except Exception as e:
-        print("Initial sync note:", e)
+    if ENABLE_SHEET_SYNC:
+        try:
+            init_db()
+            sync_from_sheet(DEFAULT_SHEET_URL)
+        except Exception as e:
+            print("Initial sync note:", e)
 
 # ----------------- AUTH & USER HELPERS -----------------
 def get_current_user():
@@ -741,16 +751,21 @@ def get_sync_status():
 
 @app.route("/api/sync/trigger", methods=["POST"])
 def trigger_sync():
+    global ENABLE_SHEET_SYNC
     data = request.json or {}
     sheet_url = data.get("sheet_url")
-    result = sync_from_sheet(sheet_url)
+    force = data.get("force", False)
+    # If user explicitly clicked Sync Now or enabled sync, allow execution
+    result = sync_from_sheet(sheet_url, force=force)
     return jsonify(result)
 
 @app.route("/api/sync/settings", methods=["POST"])
 def update_sync_settings():
+    global ENABLE_SHEET_SYNC
     data = request.json or {}
     sheet_url = data.get("sheet_url", DEFAULT_SHEET_URL)
     enabled = 1 if data.get("auto_sync_enabled") else 0
+    ENABLE_SHEET_SYNC = bool(enabled)
     interval = int(data.get("sync_interval_mins") or 10)
     
     conn = get_db()
@@ -761,7 +776,7 @@ def update_sync_settings():
     """, (sheet_url, enabled, interval))
     conn.commit()
     conn.close()
-    return jsonify({"message": "Automation settings saved"})
+    return jsonify({"message": f"Sync is now {'Active' if ENABLE_SHEET_SYNC else 'Paused'}", "enabled": ENABLE_SHEET_SYNC})
 
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
