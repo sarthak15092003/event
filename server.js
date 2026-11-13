@@ -68,6 +68,30 @@ app.get('/api/users', authenticate, (req, res) => {
   res.json(users);
 });
 
+// Delete user (or self delete profile)
+app.delete('/api/profile', authenticate, (req, res) => {
+  const userId = req.user.id;
+  try {
+    if (req.user.role === 'manager') {
+      const remainingManagers = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'manager' AND id != ?").get(userId);
+      if (remainingManagers.count === 0) {
+        return res.status(400).json({ error: 'Cannot delete the sole manager account.' });
+      }
+    }
+
+    db.prepare('UPDATE issues SET assignee_id = NULL WHERE assignee_id = ?').run(userId);
+    db.prepare('UPDATE issues SET reporter_id = NULL WHERE reporter_id = ?').run(userId);
+    db.prepare('UPDATE projects SET created_by = NULL WHERE created_by = ?').run(userId);
+    db.prepare('UPDATE worklogs SET reviewed_by = NULL WHERE reviewed_by = ?').run(userId);
+    db.prepare('DELETE FROM worklogs WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+
+    res.json({ message: 'Profile deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Manager route to add a team user
 app.post('/api/users', authenticate, requireManager, (req, res) => {
   const { name, email, password, role } = req.body;

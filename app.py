@@ -335,13 +335,34 @@ def me():
         return jsonify({"error": "Not authenticated"}), 401
     return jsonify(user)
 
-@app.route("/api/profile", methods=["GET", "POST"])
+@app.route("/api/profile", methods=["GET", "POST", "DELETE"])
 def profile_endpoint():
     user = get_current_user()
     if not user:
         return jsonify({"error": "Unauthorized"}), 401
     
     conn = get_db()
+    if request.method == "DELETE":
+        user_id = user["id"]
+        # Safety check: ensure at least one manager remains if this user is a manager
+        if user.get("role") == "manager":
+            manager_count = conn.execute("SELECT COUNT(*) as count FROM users WHERE role = 'manager' AND id != ?", (user_id,)).fetchone()["count"]
+            if manager_count == 0:
+                conn.close()
+                return jsonify({"error": "Cannot delete the sole manager account."}), 400
+
+        # Unassign or nullify references to avoid foreign key violations and preserve history
+        conn.execute("UPDATE issues SET assignee_id = NULL WHERE assignee_id = ?", (user_id,))
+        conn.execute("UPDATE issues SET reporter_id = NULL WHERE reporter_id = ?", (user_id,))
+        conn.execute("UPDATE projects SET created_by = NULL WHERE created_by = ?", (user_id,))
+        conn.execute("UPDATE worklogs SET reviewed_by = NULL WHERE reviewed_by = ?", (user_id,))
+        # Also delete or unassign worklogs
+        conn.execute("DELETE FROM worklogs WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "Profile deleted successfully"})
+
     if request.method == "POST":
         data = request.json or {}
         name = data.get("name", "").strip()

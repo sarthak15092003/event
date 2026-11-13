@@ -565,9 +565,46 @@ async function saveProfileChanges(e) {
       currentToken = data.user.email;
       localStorage.setItem('jira_token', currentToken);
       updateUserUI();
+    } else {
+      showToast(data.error || 'Failed to update profile', true);
     }
   } catch (err) {
     showToast('Failed to update profile', true);
+  }
+}
+
+async function confirmDeleteProfile() {
+  if (!currentUser) return;
+  const confirmed = confirm(`Are you sure you want to permanently delete profile "${currentUser.name}" (${currentUser.email})? This action cannot be undone.`);
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch('/api/profile', {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${currentToken}` }
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || 'Failed to delete profile', true);
+      return;
+    }
+
+    showToast('Profile successfully deleted');
+    localStorage.removeItem('jira_token');
+    currentToken = null;
+    currentUser = null;
+
+    // Refresh user list and switch to another active user
+    await loadUsers();
+    if (allUsers.length > 0) {
+      await loginAs(allUsers[0].email);
+    } else {
+      window.location.reload();
+    }
+    switchNav('my-tasks');
+  } catch (err) {
+    console.error('Delete profile error:', err);
+    showToast('Failed to delete profile', true);
   }
 }
 
@@ -578,3 +615,4 @@ function escapeHtml(str) {
   if (!str) return '';
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
+
