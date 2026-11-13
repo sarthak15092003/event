@@ -154,11 +154,11 @@ def sync_from_sheet(sheet_url=None):
         reader = csv.reader(io.StringIO(content))
         rows = list(reader)
 
-        # Ensure project exists
-        c.execute("SELECT id FROM projects WHERE key = 'PROJ'")
+        # Ensure project exists for Aeonx Google Sheet Tracker
+        c.execute("SELECT id FROM projects WHERE key = 'AEONX'")
         proj = c.fetchone()
         if not proj:
-            c.execute("INSERT INTO projects (key, name, description, created_by) VALUES ('PROJ', 'Project Platform', 'Imported from Google Sheets Live Tracker', 1)")
+            c.execute("INSERT INTO projects (key, name, description, created_by) VALUES ('AEONX', 'Aeonx Digital Events', 'Imported from Google Sheets Live Tracker', 1)")
             proj_id = c.lastrowid
         else:
             proj_id = proj["id"]
@@ -222,7 +222,7 @@ def sync_from_sheet(sheet_url=None):
             else:
                 imported_count += 1
                 seq = 100 + imported_count + updated_count
-                issue_key = f"TASK-{seq}"
+                issue_key = f"AEONX-{seq}"
                 
                 # Priority inference
                 priority = "Highest" if "venue" in current_category.lower() or "contract" in details.lower() else "Medium"
