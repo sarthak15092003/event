@@ -1,6 +1,6 @@
 // Jira WorkLog Application Logic
 let currentUser = null;
-let currentToken = localStorage.getItem('jira_token') || 'manager@jira.local';
+let currentToken = localStorage.getItem('jira_token') || '';
 let allIssues = [];
 let allUsers = [];
 let activeReviewLogId = null;
@@ -384,7 +384,7 @@ async function openIssueDetails(issueId) {
           <span>${escapeHtml(issue.reporter_name)}</span>
         `;
       } else {
-        reporterEl.innerHTML = '<span class="text-gray-400 italic">Alex Manager</span>';
+        reporterEl.innerHTML = '<span class="text-gray-400 italic">Unassigned</span>';
       }
     }
 

@@ -184,11 +184,11 @@ def sync_from_sheet(sheet_url=None):
         for u in c.execute("SELECT id, name FROM users").fetchall():
             user_cache[u["name"].strip().lower()] = u["id"]
 
-        # If manager doesn't exist, create default
-        if "alex manager" not in user_cache and "manager" not in user_cache:
-            c.execute("INSERT INTO users (name, email, role, avatar) VALUES ('Alex Manager', 'manager@jira.local', 'manager', 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex')")
-            user_cache["alex manager"] = c.lastrowid
-        manager_id = user_cache.get("alex manager", 1)
+        # Scan and find an existing active manager or user for reporting
+        manager_row = c.execute("SELECT id FROM users WHERE role = 'manager' ORDER BY id ASC LIMIT 1").fetchone()
+        if not manager_row:
+            manager_row = c.execute("SELECT id FROM users ORDER BY id ASC LIMIT 1").fetchone()
+        manager_id = manager_row["id"] if manager_row else 1
 
         for idx, r in enumerate(rows):
             if idx < 5:  # Skip headers
@@ -295,7 +295,10 @@ def get_current_user():
         token = auth.split(" ")[1]
         email = token
     if not email:
-        email = "manager@jira.local"
+        conn = get_db()
+        first_user = conn.execute("SELECT email FROM users ORDER BY CASE WHEN role = 'manager' THEN 0 ELSE 1 END, id ASC LIMIT 1").fetchone()
+        conn.close()
+        email = first_user["email"] if first_user else "ankit.parashar@jira.local"
     conn = get_db()
     user = conn.execute("SELECT id, name, email, role, avatar FROM users WHERE email = ?", (email,)).fetchone()
     conn.close()
