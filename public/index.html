@@ -51,9 +51,16 @@
 
       <!-- Quick Action Buttons -->
       <div class="hidden md:flex items-center space-x-2 border-l border-slate-200 pl-4">
-        <button onclick="triggerSheetSync()" id="quickSyncBtn" class="bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-700 font-semibold text-xs px-3 py-1.5 rounded-lg flex items-center transition">
-          <i class="fa-solid fa-arrows-rotate mr-1.5" id="syncIcon"></i> Sync Sheet
-        </button>
+        <!-- Sync Toggle & Trigger Group -->
+        <div class="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-0.5 space-x-1">
+          <button onclick="toggleSyncMasterState()" id="syncToggleBtn" class="flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold transition bg-slate-200 text-slate-600 hover:bg-slate-300">
+            <span class="w-2 h-2 rounded-full bg-slate-400" id="syncStatusDot"></span>
+            <span id="syncStatusText">Sync: Paused</span>
+          </button>
+          <button onclick="triggerSheetSync()" id="quickSyncBtn" title="Sync now manually from Google Sheets" class="hover:bg-slate-200 text-slate-700 font-semibold text-xs px-2.5 py-1 rounded-md flex items-center transition">
+            <i class="fa-solid fa-arrows-rotate mr-1" id="syncIcon"></i> Sync Now
+          </button>
+        </div>
         <button onclick="openAddUserModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs px-3 py-1.5 rounded-lg border border-slate-300 flex items-center transition">
           <i class="fa-solid fa-user-plus mr-1.5 text-blue-600"></i> New User
         </button>

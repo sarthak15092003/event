@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadUsers();
   await loadProjects();
   await loadIssues();
+  await loadSyncSettings();
   
   // Safe login fallback
   let targetEmail = currentToken;
@@ -704,7 +705,63 @@ function exportTimesheetCSV() {
     });
 }
 
-// Sheet Sync Trigger
+// Sheet Sync Trigger & State Toggle
+let isSyncActive = false;
+
+async function loadSyncSettings() {
+  try {
+    const res = await fetch('/api/sync/status');
+    if (res.ok) {
+      const data = await res.json();
+      isSyncActive = data.auto_sync_enabled === 1;
+      updateSyncToggleUI();
+
+      const autoSheetUrl = document.getElementById('autoSheetUrl');
+      const autoSyncCheckbox = document.getElementById('autoSyncCheckbox');
+      if (autoSheetUrl && data.sheet_url) autoSheetUrl.value = data.sheet_url;
+      if (autoSyncCheckbox) autoSyncCheckbox.checked = isSyncActive;
+    }
+  } catch (e) {
+    console.error('Error loading sync settings:', e);
+  }
+}
+
+function updateSyncToggleUI() {
+  const btn = document.getElementById('syncToggleBtn');
+  const dot = document.getElementById('syncStatusDot');
+  const txt = document.getElementById('syncStatusText');
+  const quickBtn = document.getElementById('quickSyncBtn');
+
+  if (isSyncActive) {
+    if (btn) btn.className = 'flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold transition bg-emerald-100 text-emerald-800 hover:bg-emerald-200';
+    if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
+    if (txt) txt.textContent = 'Sync: Active';
+    if (quickBtn) quickBtn.classList.remove('opacity-50', 'pointer-events-none');
+  } else {
+    if (btn) btn.className = 'flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold transition bg-slate-200 text-slate-600 hover:bg-slate-300';
+    if (dot) dot.className = 'w-2 h-2 rounded-full bg-slate-400';
+    if (txt) txt.textContent = 'Sync: Paused';
+  }
+}
+
+async function toggleSyncMasterState() {
+  const newState = !isSyncActive;
+  try {
+    const res = await fetch('/api/sync/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ auto_sync_enabled: newState ? 1 : 0 })
+    });
+    if (res.ok) {
+      isSyncActive = newState;
+      updateSyncToggleUI();
+      showToast(isSyncActive ? 'Google Sheet synchronization activated!' : 'Sheet synchronization paused.');
+    }
+  } catch (err) {
+    showToast('Failed to toggle sync state', true);
+  }
+}
+
 async function triggerSheetSync() {
   const icon = document.getElementById('syncIcon');
   if (icon) icon.classList.add('fa-spin');
@@ -716,14 +773,36 @@ async function triggerSheetSync() {
     });
     const data = await res.json();
     if (data.status === 'success') {
-      showToast(`Synced ${data.imported} new, ${data.updated} updated!`);
+      showToast('All deliverables synchronized successfully!');
       await loadUsers();
       await loadIssues();
+    } else {
+      showToast(data.message || 'Sync encountered an issue', true);
     }
   } catch (err) {
     showToast('Sync error', true);
   } finally {
     if (icon) icon.classList.remove('fa-spin');
+  }
+}
+
+async function saveSyncSettings(e) {
+  e.preventDefault();
+  const sheet_url = document.getElementById('autoSheetUrl').value.trim();
+  const auto_sync_enabled = document.getElementById('autoSyncCheckbox').checked;
+
+  try {
+    const res = await fetch('/api/sync/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sheet_url, auto_sync_enabled })
+    });
+    if (res.ok) {
+      showToast('Sheet Automation settings saved!');
+      await loadSyncSettings();
+    }
+  } catch (err) {
+    showToast('Error saving sync settings', true);
   }
 }
 
