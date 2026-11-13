@@ -203,6 +203,66 @@ app.get('/api/issues', authenticate, (req, res) => {
   res.json(issues);
 });
 
+// Bulk operations endpoint
+app.post('/api/issues/bulk', authenticate, (req, res) => {
+  const { action, issue_ids, project_id } = req.body || {};
+  if (!action || !issue_ids || !Array.isArray(issue_ids) || issue_ids.length === 0) {
+    return res.status(400).json({ error: 'action and issue_ids array are required' });
+  }
+
+  try {
+    if (action === 'delete') {
+      const deleteLogs = db.transaction((ids) => {
+        for (const id of ids) {
+          db.prepare('DELETE FROM worklogs WHERE issue_id = ?').run(id);
+          db.prepare('DELETE FROM issues WHERE id = ?').run(id);
+        }
+      });
+      deleteLogs(issue_ids);
+      return res.json({ message: `Successfully deleted ${issue_ids.length} task(s)` });
+    } else if (action === 'change_event') {
+      if (!project_id) return res.status(400).json({ error: 'Target project_id is required' });
+      const proj = db.prepare('SELECT id, key FROM projects WHERE id = ?').get(project_id);
+      if (!proj) return res.status(404).json({ error: 'Selected event not found' });
+
+      let count = 0;
+      for (const id of issue_ids) {
+        const issue = db.prepare('SELECT id, project_id FROM issues WHERE id = ?').get(id);
+        if (issue && issue.project_id !== project_id) {
+          const seq = db.prepare('SELECT count(*) + 101 as seq FROM issues WHERE project_id = ?').get(project_id).seq;
+          const newKey = `${proj.key}-${seq}`;
+          db.prepare('UPDATE issues SET project_id = ?, issue_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(project_id, newKey, id);
+          count++;
+        }
+      }
+      return res.json({ message: `Moved ${count} task(s) to ${proj.key}` });
+    } else if (action === 'duplicate') {
+      const newIds = [];
+      for (const id of issue_ids) {
+        const orig = db.prepare('SELECT * FROM issues WHERE id = ?').get(id);
+        if (orig) {
+          const proj = db.prepare('SELECT key FROM projects WHERE id = ?').get(orig.project_id);
+          const prefix = proj ? proj.key : 'TASK';
+          const seq = db.prepare('SELECT count(*) + 101 as seq FROM issues WHERE project_id = ?').get(orig.project_id).seq;
+          const newKey = `${prefix}-${seq}`;
+          const newTitle = `${orig.title} (Copy)`;
+          const stmt = db.prepare(`
+            INSERT INTO issues (issue_key, project_id, category, title, description, type, status, priority, assignee_id, reporter_id, original_estimate_hours, remarks, source)
+            VALUES (?, ?, ?, ?, ?, ?, 'TO DO', ?, ?, ?, ?, ?, 'app')
+          `);
+          const result = stmt.run(newKey, orig.project_id, orig.category || 'General', newTitle, orig.description || '', orig.type || 'Task', orig.priority || 'Medium', orig.assignee_id, req.user.id, orig.original_estimate_hours || 0, orig.remarks || '');
+          newIds.push(result.lastInsertRowid);
+        }
+      }
+      return res.json({ message: `Duplicated ${newIds.length} task(s)`, ids: newIds });
+    } else {
+      return res.status(400).json({ error: `Unknown action ${action}` });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/issues/:id', authenticate, (req, res) => {
   const issue = db.prepare(`
     SELECT i.*, 

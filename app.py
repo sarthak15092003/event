@@ -534,6 +534,94 @@ def issues_endpoint():
     conn.close()
     return jsonify([dict(r) for r in rows])
 
+# ----------------- BULK OPERATIONS ON ISSUES -----------------
+@app.route("/api/issues/bulk", methods=["POST"])
+def bulk_issues_endpoint():
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.json or {}
+    action = data.get("action")  # 'delete', 'duplicate', 'change_event'
+    issue_ids = data.get("issue_ids", [])
+
+    if not action or not issue_ids or not isinstance(issue_ids, list):
+        return jsonify({"error": "action and issue_ids array are required"}), 400
+
+    conn = get_db()
+    c = conn.cursor()
+
+    try:
+        if action == "delete":
+            placeholders = ",".join(["?"] * len(issue_ids))
+            # Delete associated worklogs first to maintain integrity
+            c.execute(f"DELETE FROM worklogs WHERE issue_id IN ({placeholders})", issue_ids)
+            c.execute(f"DELETE FROM issues WHERE id IN ({placeholders})", issue_ids)
+            conn.commit()
+            conn.close()
+            return jsonify({"message": f"Successfully deleted {len(issue_ids)} task(s)"})
+
+        elif action == "change_event":
+            new_project_id = data.get("project_id")
+            if not new_project_id:
+                conn.close()
+                return jsonify({"error": "Target project_id is required"}), 400
+
+            proj = c.execute("SELECT id, key FROM projects WHERE id = ?", (new_project_id,)).fetchone()
+            if not proj:
+                conn.close()
+                return jsonify({"error": "Selected event does not exist"}), 404
+
+            proj_prefix = proj["key"]
+            count = 0
+            for iid in issue_ids:
+                row = c.execute("SELECT id, project_id FROM issues WHERE id = ?", (iid,)).fetchone()
+                if row and row["project_id"] != new_project_id:
+                    c.execute("SELECT COUNT(*) + 101 FROM issues WHERE project_id = ?", (new_project_id,))
+                    seq = c.fetchone()[0]
+                    new_key = f"{proj_prefix}-{seq}"
+                    c.execute("UPDATE issues SET project_id = ?, issue_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (new_project_id, new_key, iid))
+                    count += 1
+            conn.commit()
+            conn.close()
+            return jsonify({"message": f"Moved {count} task(s) to {proj_prefix}"})
+
+        elif action == "duplicate":
+            duplicated_ids = []
+            for iid in issue_ids:
+                orig = c.execute("SELECT * FROM issues WHERE id = ?", (iid,)).fetchone()
+                if orig:
+                    orig_dict = dict(orig)
+                    pid = orig_dict["project_id"]
+                    proj = c.execute("SELECT key FROM projects WHERE id = ?", (pid,)).fetchone()
+                    prefix = proj["key"] if proj else "TASK"
+                    c.execute("SELECT COUNT(*) + 101 FROM issues WHERE project_id = ?", (pid,))
+                    seq = c.fetchone()[0]
+                    new_key = f"{prefix}-{seq}"
+                    new_title = f"{orig_dict['title']} (Copy)"
+
+                    c.execute("""
+                        INSERT INTO issues (issue_key, project_id, category, title, description, type, status, priority, assignee_id, reporter_id, original_estimate_hours, remarks, source)
+                        VALUES (?, ?, ?, ?, ?, ?, 'TO DO', ?, ?, ?, ?, ?, 'app')
+                    """, (
+                        new_key, pid, orig_dict.get("category", "General"), new_title,
+                        orig_dict.get("description", ""), orig_dict.get("type", "Task"),
+                        orig_dict.get("priority", "Medium"), orig_dict.get("assignee_id"),
+                        user["id"], orig_dict.get("original_estimate_hours", 0), orig_dict.get("remarks", "")
+                    ))
+                    duplicated_ids.append(c.lastrowid)
+            conn.commit()
+            conn.close()
+            return jsonify({"message": f"Duplicated {len(duplicated_ids)} task(s)", "ids": duplicated_ids})
+
+        else:
+            conn.close()
+            return jsonify({"error": f"Unknown action '{action}'"}), 400
+
+    except Exception as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/issues/<int:issue_id>", methods=["GET", "PATCH"])
 def single_issue_endpoint(issue_id):
     conn = get_db()

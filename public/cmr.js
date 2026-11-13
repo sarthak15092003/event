@@ -5,6 +5,7 @@ let allIssues = [];
 let allUsers = [];
 let allProjects = [];
 let activeWorkbenchFilter = 'ALL';
+let selectedTaskIds = new Set();
 
 document.addEventListener('DOMContentLoaded', async () => {
   const today = new Date().toISOString().split('T')[0];
@@ -270,13 +271,17 @@ function renderWorkbenchDeliverables() {
   } else {
     emptyState.classList.add('hidden');
     container.innerHTML = filtered.map(item => `
-      <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-xs hover:border-blue-300 transition flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div class="bg-white border ${selectedTaskIds.has(item.id) ? 'border-blue-500 bg-blue-50/20 shadow-sm' : 'border-slate-200'} rounded-xl p-4 shadow-xs hover:border-blue-300 transition flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div class="flex items-start space-x-3.5">
+          <!-- Selection Checkbox -->
+          <div class="pt-1.5 shrink-0">
+            <input type="checkbox" ${selectedTaskIds.has(item.id) ? 'checked' : ''} onchange="toggleTaskSelection(${item.id}, this.checked)" class="w-4 h-4 rounded text-blue-600 border-slate-300 cursor-pointer focus:ring-blue-500">
+          </div>
           <div class="w-8 h-8 rounded-lg ${getStatusBg(item.status)} flex items-center justify-center text-sm font-bold mt-0.5 shrink-0">
             ${getStatusIcon(item.status)}
           </div>
           <div>
-            <div class="flex items-center space-x-2">
+            <div class="flex items-center space-x-2 flex-wrap gap-y-1">
               <span class="font-bold text-xs text-blue-600">${item.issue_key}</span>
               ${item.project_name ? `<span class="text-[10px] bg-blue-50 text-blue-700 font-semibold px-1.5 py-0.2 rounded border border-blue-100">${escapeHtml(item.project_name)}</span>` : ''}
               <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded font-medium">${item.category || 'Operations'}</span>
@@ -292,17 +297,25 @@ function renderWorkbenchDeliverables() {
           </div>
         </div>
 
-        <div class="flex items-center space-x-3 text-xs border-t md:border-t-0 pt-2 md:pt-0 justify-between md:justify-end">
-          <div class="text-right">
+        <div class="flex items-center space-x-2 text-xs border-t md:border-t-0 pt-2 md:pt-0 justify-between md:justify-end">
+          <div class="text-right mr-2">
             <span class="text-slate-400 text-[10px] uppercase font-bold block">Logged</span>
             <span class="font-bold text-slate-800">${item.total_time_logged || 0} hrs</span>
           </div>
           <button onclick="openLogWorkModal(${item.id})" class="bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold px-3 py-1.5 rounded-lg border border-blue-200 transition">
             + Log Time
           </button>
+          <!-- Individual Quick Actions Dropdown / Buttons -->
+          <button onclick="singleDuplicateTask(${item.id})" title="Duplicate Task" class="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-slate-100 transition">
+            <i class="fa-regular fa-copy"></i>
+          </button>
+          <button onclick="singleDeleteTask(${item.id})" title="Delete Task" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-100 transition">
+            <i class="fa-regular fa-trash-can"></i>
+          </button>
         </div>
       </div>
     `).join('');
+    updateBulkBarUI();
   }
 }
 
@@ -374,6 +387,143 @@ function renderBoard() {
 }
 
 function allowDrop(ev) { ev.preventDefault(); }
+
+// Bulk Selection and Execution logic
+function toggleTaskSelection(id, isChecked) {
+  if (isChecked) {
+    selectedTaskIds.add(id);
+  } else {
+    selectedTaskIds.delete(id);
+  }
+  updateBulkBarUI();
+}
+
+function toggleSelectAllVisible() {
+  if (!currentUser) return;
+  const search = (document.getElementById('workbenchSearch').value || '').toLowerCase();
+  const myAssigned = allIssues.filter(i => i.assignee_id === currentUser.id);
+  const visible = myAssigned.filter(item => {
+    const matchesSearch = !search || item.title.toLowerCase().includes(search) || item.issue_key.toLowerCase().includes(search);
+    let matchesStatus = true;
+    if (activeWorkbenchFilter === 'REVIEW') matchesStatus = item.status === 'IN REVIEW';
+    else if (activeWorkbenchFilter === 'PENDING') matchesStatus = item.status === 'TO DO';
+    else if (activeWorkbenchFilter === 'IN PROGRESS') matchesStatus = item.status === 'IN PROGRESS';
+    else if (activeWorkbenchFilter === 'DONE') matchesStatus = item.status === 'DONE';
+    return matchesSearch && matchesStatus;
+  });
+
+  const allVisibleSelected = visible.length > 0 && visible.every(i => selectedTaskIds.has(i.id));
+  if (allVisibleSelected) {
+    visible.forEach(i => selectedTaskIds.delete(i.id));
+  } else {
+    visible.forEach(i => selectedTaskIds.add(i.id));
+  }
+  renderWorkbenchDeliverables();
+}
+
+function clearBulkSelection() {
+  selectedTaskIds.clear();
+  renderWorkbenchDeliverables();
+}
+
+function updateBulkBarUI() {
+  const bar = document.getElementById('bulkActionBar');
+  const countEl = document.getElementById('bulkSelectedCount');
+  const selectAllBtn = document.getElementById('btnSelectAll');
+  const count = selectedTaskIds.size;
+
+  if (countEl) countEl.textContent = count;
+  if (bar) {
+    if (count > 0) {
+      bar.classList.remove('hidden');
+    } else {
+      bar.classList.add('hidden');
+    }
+  }
+
+  if (selectAllBtn) {
+    selectAllBtn.innerHTML = count > 0 ? `<i class="fa-solid fa-square-check mr-1.5 text-blue-600"></i> Selected (${count})` : `<i class="fa-regular fa-square-check mr-1.5 text-slate-400"></i> Select All`;
+  }
+}
+
+async function singleDuplicateTask(id) {
+  selectedTaskIds.clear();
+  selectedTaskIds.add(id);
+  await executeBulkAction('duplicate');
+}
+
+async function singleDeleteTask(id) {
+  selectedTaskIds.clear();
+  selectedTaskIds.add(id);
+  await executeBulkAction('delete');
+}
+
+async function executeBulkAction(action) {
+  const ids = Array.from(selectedTaskIds);
+  if (ids.length === 0) return;
+
+  if (action === 'delete') {
+    const ok = confirm(`Are you sure you want to permanently delete ${ids.length} task(s)? This cannot be undone.`);
+    if (!ok) return;
+  }
+
+  try {
+    const res = await fetch('/api/issues/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
+      body: JSON.stringify({ action, issue_ids: ids })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(data.message || 'Action executed successfully');
+      selectedTaskIds.clear();
+      await loadIssues();
+    } else {
+      showToast(data.error || 'Bulk action failed', true);
+    }
+  } catch (err) {
+    showToast('Failed to execute bulk action', true);
+  }
+}
+
+function openBulkChangeEventModal() {
+  const ids = Array.from(selectedTaskIds);
+  if (ids.length === 0) return;
+
+  document.getElementById('bulkModalTaskCount').textContent = ids.length;
+  const select = document.getElementById('bulkTargetProjectSelect');
+  if (select && allProjects.length > 0) {
+    select.innerHTML = allProjects.map(p => `
+      <option value="${p.id}">${escapeHtml(p.name)} (${p.key})</option>
+    `).join('');
+  }
+  openModal('bulkChangeEventModal');
+}
+
+async function confirmBulkChangeEvent() {
+  const ids = Array.from(selectedTaskIds);
+  const targetProjectId = parseInt(document.getElementById('bulkTargetProjectSelect').value);
+  if (ids.length === 0 || !targetProjectId) return;
+
+  try {
+    const res = await fetch('/api/issues/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
+      body: JSON.stringify({ action: 'change_event', issue_ids: ids, project_id: targetProjectId })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      closeModal('bulkChangeEventModal');
+      showToast(data.message || 'Tasks moved to new event');
+      selectedTaskIds.clear();
+      await loadIssues();
+    } else {
+      showToast(data.error || 'Failed to move tasks', true);
+    }
+  } catch (err) {
+    showToast('Failed to change event', true);
+  }
+}
 
 async function updateDeliverableStatus(issueId, newStatus) {
   try {
