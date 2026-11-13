@@ -3,6 +3,7 @@ let currentUser = null;
 let currentToken = localStorage.getItem('jira_token') || 'ankit.parashar@jira.local';
 let allIssues = [];
 let allUsers = [];
+let allProjects = [];
 let activeWorkbenchFilter = 'ALL';
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -11,6 +12,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (dateInput) dateInput.value = today;
 
   await loadUsers();
+  await loadProjects();
   
   // Safe login fallback to Ankit or first user
   let targetEmail = currentToken;
@@ -75,6 +77,23 @@ async function loadUsers() {
     }
   } catch (err) {
     console.error('Users load error:', err);
+  }
+}
+
+async function loadProjects() {
+  try {
+    const res = await fetch('/api/projects');
+    if (res.ok) {
+      allProjects = await res.json();
+      const projSelect = document.getElementById('createIssueProject');
+      if (projSelect) {
+        projSelect.innerHTML = allProjects.map(p => `
+          <option value="${p.id}">${escapeHtml(p.name)} (${p.key})</option>
+        `).join('');
+      }
+    }
+  } catch (err) {
+    console.error('Projects load error:', err);
   }
 }
 
@@ -259,6 +278,7 @@ function renderWorkbenchDeliverables() {
           <div>
             <div class="flex items-center space-x-2">
               <span class="font-bold text-xs text-blue-600">${item.issue_key}</span>
+              ${item.project_name ? `<span class="text-[10px] bg-blue-50 text-blue-700 font-semibold px-1.5 py-0.2 rounded border border-blue-100">${escapeHtml(item.project_name)}</span>` : ''}
               <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded font-medium">${item.category || 'Operations'}</span>
               <select onchange="updateDeliverableStatus(${item.id}, this.value)" class="text-[10px] font-bold px-2 py-0.5 rounded uppercase border border-slate-200 cursor-pointer outline-none transition ${getStatusBadgeClass(item.status)}">
                 <option value="TO DO" ${item.status === 'TO DO' ? 'selected' : ''}>TO DO</option>
@@ -543,11 +563,20 @@ async function triggerSheetSync() {
 }
 
 // Modals
-function openCreateIssueModal() { openModal('createIssueModal'); }
+function openCreateIssueModal() {
+  const projSelect = document.getElementById('createIssueProject');
+  if (projSelect && allProjects.length > 0 && projSelect.children.length === 0) {
+    projSelect.innerHTML = allProjects.map(p => `
+      <option value="${p.id}">${escapeHtml(p.name)} (${p.key})</option>
+    `).join('');
+  }
+  openModal('createIssueModal');
+}
 
 async function submitNewIssue(e) {
   e.preventDefault();
   const title = document.getElementById('createIssueTitle').value;
+  const project_id = document.getElementById('createIssueProject').value;
   const category = document.getElementById('createIssueCategory').value;
   const priority = document.getElementById('createIssuePriority').value;
   const assignee_id = document.getElementById('createIssueAssignee').value;
@@ -557,7 +586,7 @@ async function submitNewIssue(e) {
     const res = await fetch('/api/issues', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
-      body: JSON.stringify({ title, category, priority, assignee_id, reporter_id })
+      body: JSON.stringify({ title, project_id, category, priority, assignee_id, reporter_id })
     });
     if (res.ok) {
       closeModal('createIssueModal');

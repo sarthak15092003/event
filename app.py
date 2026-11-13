@@ -439,6 +439,43 @@ def users_endpoint():
     conn.close()
     return jsonify([dict(r) for r in rows])
 
+@app.route("/api/projects", methods=["GET", "POST"])
+def projects_endpoint():
+    conn = get_db()
+    if request.method == "POST":
+        user = get_current_user()
+        data = request.json or {}
+        name = data.get("name", "").strip()
+        key = data.get("key", "").strip().upper()
+        desc = data.get("description", "").strip()
+        if not name:
+            conn.close()
+            return jsonify({"error": "Event name is required"}), 400
+        if not key:
+            # Generate key from initials/short name
+            clean = "".join([c for c in name if c.isalnum() or c.isspace()]).split()
+            key = "".join([w[:3] for w in clean])[:6].upper() or "EVT"
+            
+        try:
+            cur = conn.execute("INSERT INTO projects (key, name, description, created_by) VALUES (?, ?, ?, ?)", (key, name, desc, user["id"] if user else 1))
+            conn.commit()
+            new_id = cur.lastrowid
+            conn.close()
+            return jsonify({"id": new_id, "key": key, "name": name, "description": desc}), 201
+        except Exception as e:
+            conn.close()
+            return jsonify({"error": str(e)}), 400
+
+    rows = conn.execute("""
+        SELECT p.*, u.name as creator_name,
+        (SELECT COUNT(*) FROM issues WHERE project_id = p.id) as total_issues
+        FROM projects p
+        LEFT JOIN users u ON p.created_by = u.id
+        ORDER BY p.id ASC
+    """).fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
 @app.route("/api/issues", methods=["GET", "POST"])
 def issues_endpoint():
     conn = get_db()
@@ -457,17 +494,23 @@ def issues_endpoint():
         assignee_id = int(assignee_id) if assignee_id else None
         reporter_id = data.get("reporter_id")
         reporter_id = int(reporter_id) if reporter_id else user["id"]
+        project_id = data.get("project_id")
+        project_id = int(project_id) if project_id else 1
         est = float(data.get("original_estimate_hours") or 0)
         
+        # Get project key
+        proj_row = conn.execute("SELECT key FROM projects WHERE id = ?", (project_id,)).fetchone()
+        proj_prefix = proj_row["key"] if proj_row else "TASK"
+
         c = conn.cursor()
-        c.execute("SELECT COUNT(*) + 101 FROM issues")
+        c.execute("SELECT COUNT(*) + 101 FROM issues WHERE project_id = ?", (project_id,))
         seq = c.fetchone()[0]
-        key = f"TASK-{seq}"
+        key = f"{proj_prefix}-{seq}"
         
         c.execute("""
             INSERT INTO issues (issue_key, project_id, category, title, description, type, status, priority, assignee_id, reporter_id, original_estimate_hours, source)
-            VALUES (?, 1, ?, ?, ?, ?, 'TO DO', ?, ?, ?, ?, 'app')
-        """, (key, category, title, desc, itype, priority, assignee_id, reporter_id, est))
+            VALUES (?, ?, ?, ?, ?, ?, 'TO DO', ?, ?, ?, ?, 'app')
+        """, (key, project_id, category, title, desc, itype, priority, assignee_id, reporter_id, est))
         conn.commit()
         new_id = c.lastrowid
         conn.close()
