@@ -581,20 +581,36 @@ async function submitNewIssue(e) {
   const priority = document.getElementById('createIssuePriority').value;
   const assignee_id = document.getElementById('createIssueAssignee').value;
   const reporter_id = document.getElementById('createIssueReporter').value;
+  const itype = document.getElementById('createIssueType') ? document.getElementById('createIssueType').value : 'Task';
+  const original_estimate_hours = document.getElementById('createIssueEstimate') ? parseFloat(document.getElementById('createIssueEstimate').value) || 0 : 0;
+  const description = document.getElementById('createIssueDesc') ? document.getElementById('createIssueDesc').value : '';
 
   try {
     const res = await fetch('/api/issues', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
-      body: JSON.stringify({ title, project_id, category, priority, assignee_id, reporter_id })
+      body: JSON.stringify({
+        title,
+        project_id,
+        category,
+        priority,
+        assignee_id,
+        reporter_id,
+        type: itype,
+        original_estimate_hours,
+        description
+      })
     });
     if (res.ok) {
       closeModal('createIssueModal');
-      showToast('Deliverable created successfully');
+      showToast('Task created successfully');
       await loadIssues();
+    } else {
+      const err = await res.json();
+      showToast(err.error || 'Failed to create task', true);
     }
   } catch (err) {
-    showToast('Error creating deliverable', true);
+    showToast('Error creating task', true);
   }
 }
 
