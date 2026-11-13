@@ -592,6 +592,95 @@
     </div>
   </div>
 
+  <!-- Task Details Modal -->
+  <div id="taskDetailModal" class="fixed inset-0 bg-black/60 z-[65] hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs">
+      <!-- Modal Header -->
+      <div class="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+        <div class="flex items-center space-x-2 flex-wrap">
+          <span id="taskDetailKey" class="text-xs font-bold text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded"></span>
+          <span id="taskDetailProject" class="text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded"></span>
+          <span id="taskDetailCategory" class="text-[11px] font-medium bg-slate-200 text-slate-700 px-2 py-0.5 rounded"></span>
+        </div>
+        <button onclick="closeModal('taskDetailModal')" class="text-slate-400 hover:text-slate-600 text-lg">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-6 space-y-5 overflow-y-auto flex-1">
+        <div>
+          <h3 id="taskDetailTitle" class="text-lg font-bold text-slate-900 leading-snug"></h3>
+        </div>
+
+        <div>
+          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Remarks / Scope Details</div>
+          <div id="taskDetailRemarks" class="text-slate-700 bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs whitespace-pre-line leading-relaxed"></div>
+        </div>
+
+        <!-- Metadata Grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs">
+          <div>
+            <span class="text-slate-400 block text-[10px] uppercase font-bold mb-1">Assignee / Owner</span>
+            <div id="taskDetailAssignee" class="flex items-center space-x-1.5 font-semibold text-slate-800"></div>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[10px] uppercase font-bold mb-1">Reporter</span>
+            <div id="taskDetailReporter" class="flex items-center space-x-1.5 font-semibold text-slate-800"></div>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[10px] uppercase font-bold mb-1">Priority</span>
+            <span id="taskDetailPriority" class="font-bold text-slate-800">Medium</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[10px] uppercase font-bold mb-1">Status</span>
+            <select id="taskDetailStatusSelect" onchange="updateTaskStatusFromDetailModal()" class="w-full border border-slate-300 rounded-lg px-2 py-1 bg-white font-bold text-slate-700 text-xs">
+              <option value="TO DO">TO DO</option>
+              <option value="IN PROGRESS">IN PROGRESS</option>
+              <option value="IN REVIEW">IN REVIEW</option>
+              <option value="DONE">DONE</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3">
+          <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 text-center">
+            <span class="text-slate-400 text-[10px] uppercase font-bold block mb-0.5">Estimate</span>
+            <span id="taskDetailEstimate" class="font-black text-sm text-slate-800">0 hrs</span>
+          </div>
+          <div class="p-3 bg-blue-50/50 rounded-xl border border-blue-100 text-center">
+            <span class="text-blue-600 text-[10px] uppercase font-bold block mb-0.5">Total Logged</span>
+            <span id="taskDetailLogged" class="font-black text-sm text-blue-700">0 hrs</span>
+          </div>
+          <div class="p-3 bg-emerald-50/50 rounded-xl border border-emerald-100 text-center">
+            <span class="text-emerald-600 text-[10px] uppercase font-bold block mb-0.5">Approved</span>
+            <span id="taskDetailApproved" class="font-black text-sm text-emerald-700">0 hrs</span>
+          </div>
+        </div>
+
+        <!-- Worklogs Section -->
+        <div class="border-t border-slate-200 pt-4">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center">
+              <i class="fa-solid fa-clock mr-1.5 text-blue-600"></i> Work Logged on Deliverable
+            </h4>
+            <button onclick="openLogWorkFromTaskDetail()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg transition shadow-xs">
+              + Log Time
+            </button>
+          </div>
+          <div id="taskDetailWorklogsList" class="space-y-2 max-h-48 overflow-y-auto pr-1"></div>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-6 py-3 border-t border-slate-200 bg-slate-50 flex justify-end">
+        <button type="button" onclick="closeModal('taskDetailModal')" class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-semibold hover:bg-white transition">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Create New Event Modal -->
   <div id="newProjectModal" class="fixed inset-0 bg-black/60 z-[60] hidden flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden text-xs">

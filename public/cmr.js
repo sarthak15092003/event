@@ -292,7 +292,10 @@ function renderWorkbenchDeliverables() {
                 <option value="DONE" ${item.status === 'DONE' ? 'selected' : ''}>DONE</option>
               </select>
             </div>
-            <h4 class="font-bold text-sm text-slate-900 mt-0.5">${escapeHtml(item.title)}</h4>
+            <h4 onclick="openTaskDetails(${item.id})" class="font-bold text-sm text-slate-900 mt-0.5 hover:text-blue-600 cursor-pointer flex items-center group">
+              <span>${escapeHtml(item.title)}</span>
+              <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-400 group-hover:text-blue-600 ml-1.5 opacity-0 group-hover:opacity-100 transition"></i>
+            </h4>
             ${item.remarks ? `<p class="text-[11px] text-amber-700 mt-0.5">Note: ${escapeHtml(item.remarks)}</p>` : ''}
           </div>
         </div>
@@ -302,6 +305,9 @@ function renderWorkbenchDeliverables() {
             <span class="text-slate-400 text-[10px] uppercase font-bold block">Logged</span>
             <span class="font-bold text-slate-800">${item.total_time_logged || 0} hrs</span>
           </div>
+          <button onclick="openTaskDetails(${item.id})" class="bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold px-2.5 py-1.5 rounded-lg border border-slate-200 transition flex items-center">
+            <i class="fa-regular fa-eye mr-1 text-slate-500"></i> Details
+          </button>
           <button onclick="openLogWorkModal(${item.id})" class="bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold px-3 py-1.5 rounded-lg border border-blue-200 transition">
             + Log Time
           </button>
@@ -363,16 +369,21 @@ function renderBoard() {
     target.list.push(issue);
     
     const card = document.createElement('div');
-    card.className = 'bg-white rounded-xl p-3 border border-slate-200 shadow-xs hover:shadow-sm transition select-none text-xs space-y-1.5 cursor-grab';
+    card.className = 'bg-white rounded-xl p-3 border border-slate-200 shadow-xs hover:shadow-sm hover:border-blue-300 transition select-none text-xs space-y-1.5 cursor-pointer';
     card.draggable = true;
     card.ondragstart = (e) => e.dataTransfer.setData('text/plain', issue.id);
+    card.onclick = (e) => {
+      // Don't trigger modal if dragging or clicking buttons
+      if (e.target.closest('button') || e.target.closest('select')) return;
+      openTaskDetails(issue.id);
+    };
 
     card.innerHTML = `
       <div class="flex items-center justify-between text-[11px]">
         <span class="font-bold text-blue-600">${issue.issue_key}</span>
         <span class="text-[10px] text-slate-400 font-semibold truncate max-w-[100px]">${issue.category || 'Operations'}</span>
       </div>
-      <div class="font-bold text-slate-800 line-clamp-2">${escapeHtml(issue.title)}</div>
+      <div class="font-bold text-slate-800 line-clamp-2 hover:text-blue-600">${escapeHtml(issue.title)}</div>
       <div class="flex items-center justify-between pt-1 text-[11px] text-slate-400">
         <span><i class="fa-regular fa-clock mr-1"></i>${issue.total_time_logged || 0}h</span>
         <span class="font-semibold text-slate-700">${issue.assignee_name ? issue.assignee_name.split(' ')[0] : 'Unassigned'}</span>
@@ -902,6 +913,118 @@ async function submitNewUser(e) {
     }
   } catch (err) {
     showToast('Network error creating user', true);
+  }
+}
+
+// ----------------- TASK DETAILS MODAL -----------------
+let currentSelectedTaskId = null;
+
+async function openTaskDetails(taskId) {
+  currentSelectedTaskId = taskId;
+  try {
+    const res = await fetch(`/api/issues/${taskId}`, {
+      headers: { 'Authorization': `Bearer ${currentToken}` }
+    });
+    if (!res.ok) return showToast('Failed to load task details', true);
+
+    const issue = await res.json();
+    document.getElementById('taskDetailKey').textContent = issue.issue_key;
+    document.getElementById('taskDetailCategory').textContent = issue.category || 'General';
+    document.getElementById('taskDetailProject').textContent = issue.project_name || 'Event Project';
+    document.getElementById('taskDetailTitle').textContent = issue.title;
+    document.getElementById('taskDetailRemarks').textContent = issue.remarks || issue.description || 'No additional remarks.';
+    document.getElementById('taskDetailPriority').textContent = issue.priority || 'Medium';
+    document.getElementById('taskDetailEstimate').textContent = `${issue.original_estimate_hours || 0} hrs`;
+    document.getElementById('taskDetailLogged').textContent = `${issue.total_time_logged || 0} hrs`;
+    document.getElementById('taskDetailApproved').textContent = `${issue.approved_time_logged || 0} hrs`;
+    document.getElementById('taskDetailStatusSelect').value = issue.status;
+
+    // Assignee
+    const assigneeEl = document.getElementById('taskDetailAssignee');
+    if (issue.assignee_name) {
+      assigneeEl.innerHTML = `
+        <div class="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[9px]">
+          ${getInitials(issue.assignee_name)}
+        </div>
+        <span class="font-semibold text-slate-800">${escapeHtml(issue.assignee_name)}</span>
+      `;
+    } else {
+      assigneeEl.innerHTML = '<span class="text-slate-400 italic">Unassigned</span>';
+    }
+
+    // Reporter
+    const reporterEl = document.getElementById('taskDetailReporter');
+    if (reporterEl) {
+      if (issue.reporter_name) {
+        reporterEl.innerHTML = `
+          <div class="w-5 h-5 rounded-full bg-slate-600 text-white flex items-center justify-center font-bold text-[9px]">
+            ${getInitials(issue.reporter_name)}
+          </div>
+          <span class="font-semibold text-slate-800">${escapeHtml(issue.reporter_name)}</span>
+        `;
+      } else {
+        reporterEl.innerHTML = '<span class="text-slate-400 italic">Manager</span>';
+      }
+    }
+
+    // Render Worklogs
+    const logListEl = document.getElementById('taskDetailWorklogsList');
+    if (!issue.worklogs || issue.worklogs.length === 0) {
+      logListEl.innerHTML = '<div class="text-xs text-slate-400 italic py-2 text-center bg-slate-50 rounded-lg">No time logged on this task yet.</div>';
+    } else {
+      logListEl.innerHTML = issue.worklogs.map(log => `
+        <div class="p-3 rounded-lg border border-slate-200 bg-white flex items-start justify-between text-xs hover:border-slate-300 transition">
+          <div class="flex items-start space-x-2.5">
+            <div class="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px] mt-0.5">
+              ${getInitials(log.user_name)}
+            </div>
+            <div>
+              <div class="font-bold text-slate-800">${escapeHtml(log.user_name)} <span class="font-bold text-blue-600">logged ${log.time_spent_hours} hrs</span> on ${log.work_date}</div>
+              <p class="text-slate-600 mt-0.5">${escapeHtml(log.description || 'No comment provided')}</p>
+              ${log.manager_note ? `<div class="mt-1 text-[11px] bg-amber-50 border-l-2 border-amber-400 pl-2 py-0.5 text-amber-800 rounded-r"><strong>Manager Feedback:</strong> ${escapeHtml(log.manager_note)}</div>` : ''}
+            </div>
+          </div>
+          <span class="text-[10px] px-2 py-0.5 rounded font-bold uppercase ${log.status === 'approved' ? 'bg-emerald-100 text-emerald-800' : (log.status === 'rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800')}">
+            ${log.status}
+          </span>
+        </div>
+      `).join('');
+    }
+
+    openModal('taskDetailModal');
+  } catch (err) {
+    showToast('Failed to load task details', true);
+  }
+}
+
+async function updateTaskStatusFromDetailModal() {
+  const newStatus = document.getElementById('taskDetailStatusSelect').value;
+  if (!currentSelectedTaskId) return;
+
+  try {
+    const res = await fetch(`/api/issues/${currentSelectedTaskId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentToken}`
+      },
+      body: JSON.stringify({ status: newStatus })
+    });
+    if (res.ok) {
+      showToast(`Status updated to ${newStatus}`);
+      await loadIssues();
+    } else {
+      showToast('Failed to update status', true);
+    }
+  } catch (err) {
+    showToast('Network error updating status', true);
+  }
+}
+
+function openLogWorkFromTaskDetail() {
+  if (currentSelectedTaskId) {
+    closeModal('taskDetailModal');
+    openLogWorkModal(currentSelectedTaskId);
   }
 }
 
