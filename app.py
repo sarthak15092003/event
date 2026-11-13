@@ -528,7 +528,7 @@ def issues_endpoint():
         JOIN projects p ON i.project_id = p.id
         LEFT JOIN users u1 ON i.assignee_id = u1.id
         LEFT JOIN users u2 ON i.reporter_id = u2.id
-        ORDER BY i.id DESC
+        ORDER BY i.id ASC
     """
     rows = conn.execute(query).fetchall()
     conn.close()
