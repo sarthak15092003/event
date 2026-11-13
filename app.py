@@ -560,7 +560,7 @@ def single_issue_endpoint(issue_id):
         data = request.json or {}
         updates = []
         params = []
-        for field in ["status", "assignee_id", "priority", "title", "description", "original_estimate_hours", "category"]:
+        for field in ["status", "assignee_id", "reporter_id", "priority", "title", "description", "original_estimate_hours", "category", "remarks"]:
             if field in data:
                 updates.append(f"{field} = ?")
                 params.append(data[field])

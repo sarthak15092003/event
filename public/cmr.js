@@ -925,81 +925,95 @@ async function openTaskDetails(taskId) {
     const res = await fetch(`/api/issues/${taskId}`, {
       headers: { 'Authorization': `Bearer ${currentToken}` }
     });
-    if (!res.ok) return showToast('Failed to load task details', true);
+    if (!res.ok) {
+      // Fallback: try finding issue from in-memory allIssues list if live endpoint returns not found
+      const localIssue = allIssues.find(i => i.id == taskId);
+      if (localIssue) {
+        populateTaskDetailModal(localIssue);
+        openModal('taskDetailModal');
+        return;
+      }
+      return showToast('Failed to load task details', true);
+    }
 
     const issue = await res.json();
-    document.getElementById('taskDetailKey').textContent = issue.issue_key;
-    document.getElementById('taskDetailCategory').textContent = issue.category || 'General';
-    document.getElementById('taskDetailProject').textContent = issue.project_name || 'Event Project';
-    document.getElementById('taskDetailTitle').textContent = issue.title;
-    document.getElementById('taskDetailRemarks').textContent = issue.remarks || issue.description || 'No additional remarks.';
-    document.getElementById('taskDetailPriority').textContent = issue.priority || 'Medium';
-    document.getElementById('taskDetailEstimate').textContent = `${issue.original_estimate_hours || 0} hrs`;
-    document.getElementById('taskDetailLogged').textContent = `${issue.total_time_logged || 0} hrs`;
-    document.getElementById('taskDetailApproved').textContent = `${issue.approved_time_logged || 0} hrs`;
-    document.getElementById('taskDetailStatusSelect').value = issue.status;
-
-    // Assignee
-    const assigneeEl = document.getElementById('taskDetailAssignee');
-    if (issue.assignee_name) {
-      assigneeEl.innerHTML = `
-        <div class="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[9px]">
-          ${getInitials(issue.assignee_name)}
-        </div>
-        <span class="font-semibold text-slate-800">${escapeHtml(issue.assignee_name)}</span>
-      `;
-    } else {
-      assigneeEl.innerHTML = '<span class="text-slate-400 italic">Unassigned</span>';
-    }
-
-    // Reporter
-    const reporterEl = document.getElementById('taskDetailReporter');
-    if (reporterEl) {
-      if (issue.reporter_name) {
-        reporterEl.innerHTML = `
-          <div class="w-5 h-5 rounded-full bg-slate-600 text-white flex items-center justify-center font-bold text-[9px]">
-            ${getInitials(issue.reporter_name)}
-          </div>
-          <span class="font-semibold text-slate-800">${escapeHtml(issue.reporter_name)}</span>
-        `;
-      } else {
-        reporterEl.innerHTML = '<span class="text-slate-400 italic">Manager</span>';
-      }
-    }
-
-    // Render Worklogs
-    const logListEl = document.getElementById('taskDetailWorklogsList');
-    if (!issue.worklogs || issue.worklogs.length === 0) {
-      logListEl.innerHTML = '<div class="text-xs text-slate-400 italic py-2 text-center bg-slate-50 rounded-lg">No time logged on this task yet.</div>';
-    } else {
-      logListEl.innerHTML = issue.worklogs.map(log => `
-        <div class="p-3 rounded-lg border border-slate-200 bg-white flex items-start justify-between text-xs hover:border-slate-300 transition">
-          <div class="flex items-start space-x-2.5">
-            <div class="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px] mt-0.5">
-              ${getInitials(log.user_name)}
-            </div>
-            <div>
-              <div class="font-bold text-slate-800">${escapeHtml(log.user_name)} <span class="font-bold text-blue-600">logged ${log.time_spent_hours} hrs</span> on ${log.work_date}</div>
-              <p class="text-slate-600 mt-0.5">${escapeHtml(log.description || 'No comment provided')}</p>
-              ${log.manager_note ? `<div class="mt-1 text-[11px] bg-amber-50 border-l-2 border-amber-400 pl-2 py-0.5 text-amber-800 rounded-r"><strong>Manager Feedback:</strong> ${escapeHtml(log.manager_note)}</div>` : ''}
-            </div>
-          </div>
-          <span class="text-[10px] px-2 py-0.5 rounded font-bold uppercase ${log.status === 'approved' ? 'bg-emerald-100 text-emerald-800' : (log.status === 'rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800')}">
-            ${log.status}
-          </span>
-        </div>
-      `).join('');
-    }
-
+    populateTaskDetailModal(issue);
     openModal('taskDetailModal');
   } catch (err) {
+    // Fallback on network/fetch error
+    const localIssue = allIssues.find(i => i.id == taskId);
+    if (localIssue) {
+      populateTaskDetailModal(localIssue);
+      openModal('taskDetailModal');
+      return;
+    }
     showToast('Failed to load task details', true);
   }
 }
 
-async function updateTaskStatusFromDetailModal() {
-  const newStatus = document.getElementById('taskDetailStatusSelect').value;
+function populateTaskDetailModal(issue) {
+  document.getElementById('taskDetailKey').textContent = issue.issue_key;
+  document.getElementById('taskDetailCategory').textContent = issue.category || 'General';
+  document.getElementById('taskDetailProject').textContent = issue.project_name || 'Event Project';
+  document.getElementById('taskDetailTitle').textContent = issue.title;
+  document.getElementById('taskDetailRemarks').textContent = issue.remarks || issue.description || 'No additional remarks.';
+  
+  const prioritySelect = document.getElementById('taskDetailPrioritySelect');
+  if (prioritySelect) prioritySelect.value = issue.priority || 'Medium';
+
+  document.getElementById('taskDetailEstimate').textContent = `${issue.original_estimate_hours || 0} hrs`;
+  document.getElementById('taskDetailLogged').textContent = `${issue.total_time_logged || 0} hrs`;
+  document.getElementById('taskDetailApproved').textContent = `${issue.approved_time_logged || 0} hrs`;
+  document.getElementById('taskDetailStatusSelect').value = issue.status;
+
+  // Populate Assignee Select
+  const assigneeSelect = document.getElementById('taskDetailAssigneeSelect');
+  if (assigneeSelect) {
+    assigneeSelect.innerHTML = '<option value="">Unassigned</option>' + allUsers.map(u => `
+      <option value="${u.id}" ${issue.assignee_id == u.id ? 'selected' : ''}>${escapeHtml(u.name)}</option>
+    `).join('');
+  }
+
+  // Populate Reporter Select
+  const reporterSelect = document.getElementById('taskDetailReporterSelect');
+  if (reporterSelect) {
+    reporterSelect.innerHTML = allUsers.map(u => `
+      <option value="${u.id}" ${issue.reporter_id == u.id ? 'selected' : ''}>${escapeHtml(u.name)}</option>
+    `).join('');
+  }
+
+  // Render Worklogs
+  const logListEl = document.getElementById('taskDetailWorklogsList');
+  if (!issue.worklogs || issue.worklogs.length === 0) {
+    logListEl.innerHTML = '<div class="text-xs text-slate-400 italic py-2 text-center bg-slate-50 rounded-lg">No time logged on this task yet.</div>';
+  } else {
+    logListEl.innerHTML = issue.worklogs.map(log => `
+      <div class="p-3 rounded-lg border border-slate-200 bg-white flex items-start justify-between text-xs hover:border-slate-300 transition">
+        <div class="flex items-start space-x-2.5">
+          <div class="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px] mt-0.5">
+            ${getInitials(log.user_name)}
+          </div>
+          <div>
+            <div class="font-bold text-slate-800">${escapeHtml(log.user_name)} <span class="font-bold text-blue-600">logged ${log.time_spent_hours} hrs</span> on ${log.work_date}</div>
+            <p class="text-slate-600 mt-0.5">${escapeHtml(log.description || 'No comment provided')}</p>
+            ${log.manager_note ? `<div class="mt-1 text-[11px] bg-amber-50 border-l-2 border-amber-400 pl-2 py-0.5 text-amber-800 rounded-r"><strong>Manager Feedback:</strong> ${escapeHtml(log.manager_note)}</div>` : ''}
+          </div>
+        </div>
+        <span class="text-[10px] px-2 py-0.5 rounded font-bold uppercase ${log.status === 'approved' ? 'bg-emerald-100 text-emerald-800' : (log.status === 'rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800')}">
+          ${log.status}
+        </span>
+      </div>
+    `).join('');
+  }
+}
+
+async function updateTaskFieldFromDetailModal(fieldName, val) {
   if (!currentSelectedTaskId) return;
+
+  const payload = {};
+  if (fieldName === 'assignee_id') payload.assignee_id = val ? parseInt(val) : null;
+  else if (fieldName === 'reporter_id') payload.reporter_id = val ? parseInt(val) : null;
+  else payload[fieldName] = val;
 
   try {
     const res = await fetch(`/api/issues/${currentSelectedTaskId}`, {
@@ -1008,17 +1022,22 @@ async function updateTaskStatusFromDetailModal() {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${currentToken}`
       },
-      body: JSON.stringify({ status: newStatus })
+      body: JSON.stringify(payload)
     });
     if (res.ok) {
-      showToast(`Status updated to ${newStatus}`);
+      showToast(`Deliverable updated successfully!`);
       await loadIssues();
     } else {
-      showToast('Failed to update status', true);
+      showToast('Failed to update field', true);
     }
   } catch (err) {
-    showToast('Network error updating status', true);
+    showToast('Network error updating field', true);
   }
+}
+
+async function updateTaskStatusFromDetailModal() {
+  const newStatus = document.getElementById('taskDetailStatusSelect').value;
+  await updateTaskFieldFromDetailModal('status', newStatus);
 }
 
 function openLogWorkFromTaskDetail() {

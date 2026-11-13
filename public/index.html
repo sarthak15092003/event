@@ -621,20 +621,29 @@
         <!-- Metadata Grid -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs">
           <div>
-            <span class="text-slate-400 block text-[10px] uppercase font-bold mb-1">Assignee / Owner</span>
-            <div id="taskDetailAssignee" class="flex items-center space-x-1.5 font-semibold text-slate-800"></div>
+            <label class="text-slate-500 block text-[10px] uppercase font-bold mb-1">Assignee / Owner</label>
+            <select id="taskDetailAssigneeSelect" onchange="updateTaskFieldFromDetailModal('assignee_id', this.value)" class="w-full border border-slate-300 rounded-lg px-2 py-1.5 bg-white font-medium text-slate-800 text-xs">
+              <!-- Rendered dynamically -->
+            </select>
           </div>
           <div>
-            <span class="text-slate-400 block text-[10px] uppercase font-bold mb-1">Reporter</span>
-            <div id="taskDetailReporter" class="flex items-center space-x-1.5 font-semibold text-slate-800"></div>
+            <label class="text-slate-500 block text-[10px] uppercase font-bold mb-1">Reporter</label>
+            <select id="taskDetailReporterSelect" onchange="updateTaskFieldFromDetailModal('reporter_id', this.value)" class="w-full border border-slate-300 rounded-lg px-2 py-1.5 bg-white font-medium text-slate-800 text-xs">
+              <!-- Rendered dynamically -->
+            </select>
           </div>
           <div>
-            <span class="text-slate-400 block text-[10px] uppercase font-bold mb-1">Priority</span>
-            <span id="taskDetailPriority" class="font-bold text-slate-800">Medium</span>
+            <label class="text-slate-500 block text-[10px] uppercase font-bold mb-1">Priority</label>
+            <select id="taskDetailPrioritySelect" onchange="updateTaskFieldFromDetailModal('priority', this.value)" class="w-full border border-slate-300 rounded-lg px-2 py-1.5 bg-white font-medium text-slate-800 text-xs">
+              <option value="Highest">Highest</option>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </select>
           </div>
           <div>
-            <span class="text-slate-400 block text-[10px] uppercase font-bold mb-1">Status</span>
-            <select id="taskDetailStatusSelect" onchange="updateTaskStatusFromDetailModal()" class="w-full border border-slate-300 rounded-lg px-2 py-1 bg-white font-bold text-slate-700 text-xs">
+            <label class="text-slate-500 block text-[10px] uppercase font-bold mb-1">Status</label>
+            <select id="taskDetailStatusSelect" onchange="updateTaskFieldFromDetailModal('status', this.value)" class="w-full border border-slate-300 rounded-lg px-2 py-1.5 bg-white font-bold text-slate-700 text-xs">
               <option value="TO DO">TO DO</option>
               <option value="IN PROGRESS">IN PROGRESS</option>
               <option value="IN REVIEW">IN REVIEW</option>
