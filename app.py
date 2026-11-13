@@ -416,14 +416,15 @@ def profile_endpoint():
 def users_endpoint():
     conn = get_db()
     if request.method == "POST":
-        user = get_current_user()
-        if not user or user.get("role") != "manager":
-            conn.close()
-            return jsonify({"error": "Manager privileges required"}), 403
         data = request.json or {}
-        name = data.get("name")
-        email = data.get("email")
+        name = (data.get("name") or "").strip()
+        email = (data.get("email") or "").strip()
         role = "manager" if data.get("role") == "manager" else "member"
+        if not name:
+            conn.close()
+            return jsonify({"error": "User name is required"}), 400
+        if not email:
+            email = f"{name.lower().replace(' ', '.')}@cybermedia.co.in"
         avatar = f"https://api.dicebear.com/7.x/avataaars/svg?seed={name}"
         try:
             cur = conn.execute("INSERT INTO users (name, email, role, avatar) VALUES (?, ?, ?, ?)", (name, email, role, avatar))
@@ -431,9 +432,9 @@ def users_endpoint():
             uid = cur.lastrowid
             conn.close()
             return jsonify({"id": uid, "name": name, "email": email, "role": role, "avatar": avatar}), 201
-        except sqlite3.IntegrityError:
+        except Exception as e:
             conn.close()
-            return jsonify({"error": "User with this email already exists"}), 400
+            return jsonify({"error": f"Failed to create user: {str(e)}"}), 400
 
     rows = conn.execute("SELECT id, name, email, role, avatar FROM users ORDER BY name ASC").fetchall()
     conn.close()

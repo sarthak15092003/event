@@ -864,6 +864,47 @@ async function confirmDeleteProfile() {
   }
 }
 
+function openAddUserModal() {
+  document.getElementById('addUserName').value = '';
+  document.getElementById('addUserEmail').value = '';
+  openModal('addUserModal');
+}
+
+async function submitNewUser(e) {
+  e.preventDefault();
+  const name = document.getElementById('addUserName').value.trim();
+  const email = document.getElementById('addUserEmail').value.trim();
+  const role = document.getElementById('addUserRole').value;
+
+  if (!name) return;
+
+  try {
+    const res = await fetch('/api/users', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentToken}`
+      },
+      body: JSON.stringify({ name, email, role })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      closeModal('addUserModal');
+      showToast(`User ${name} added successfully!`);
+      await loadUsers();
+      // Auto select in Create Modal if open
+      const createAssignee = document.getElementById('createIssueAssignee');
+      if (createAssignee && data.id) {
+        createAssignee.value = data.id;
+      }
+    } else {
+      showToast(data.error || 'Failed to add user', true);
+    }
+  } catch (err) {
+    showToast('Network error creating user', true);
+  }
+}
+
 function openModal(id) { const el = document.getElementById(id); if (el) el.classList.remove('hidden'); }
 function closeModal(id) { const el = document.getElementById(id); if (el) el.classList.add('hidden'); }
 

@@ -54,6 +54,9 @@
         <button onclick="triggerSheetSync()" id="quickSyncBtn" class="bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-700 font-semibold text-xs px-3 py-1.5 rounded-lg flex items-center transition">
           <i class="fa-solid fa-arrows-rotate mr-1.5" id="syncIcon"></i> Sync Sheet
         </button>
+        <button onclick="openAddUserModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs px-3 py-1.5 rounded-lg border border-slate-300 flex items-center transition">
+          <i class="fa-solid fa-user-plus mr-1.5 text-blue-600"></i> New User
+        </button>
         <button onclick="openCreateIssueModal()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-3.5 py-1.5 rounded-lg shadow-xs flex items-center transition">
           <i class="fa-solid fa-plus mr-1.5"></i> New Deliverable
         </button>
@@ -518,7 +521,12 @@
             </select>
           </div>
           <div>
-            <label class="block font-semibold text-slate-700 mb-1">Assignee / Owner</label>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block font-semibold text-slate-700">Assignee / Owner</label>
+              <button type="button" onclick="openAddUserModal()" class="text-blue-600 hover:text-blue-700 font-bold text-[11px] flex items-center">
+                <i class="fa-solid fa-plus mr-1"></i> New User
+              </button>
+            </div>
             <select id="createIssueAssignee" class="w-full border border-slate-300 rounded-lg p-2.5 bg-white"></select>
           </div>
         </div>
@@ -547,6 +555,38 @@
         <div class="flex justify-end space-x-2 pt-2">
           <button type="button" onclick="closeModal('createIssueModal')" class="px-3.5 py-2 border border-slate-200 rounded-lg text-slate-600 font-semibold hover:bg-slate-50">Cancel</button>
           <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-xs">Create Task</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Create New User Modal -->
+  <div id="addUserModal" class="fixed inset-0 bg-black/60 z-[70] hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden text-xs">
+      <div class="px-5 py-3.5 border-b border-blue-600 bg-blue-600 text-white flex justify-between items-center">
+        <span class="font-bold text-sm flex items-center"><i class="fa-solid fa-user-plus mr-2"></i> Add New Team Member</span>
+        <button onclick="closeModal('addUserModal')" class="text-white/80 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form onsubmit="submitNewUser(event)" class="p-5 space-y-3.5">
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Full Name *</label>
+          <input type="text" id="addUserName" required class="w-full border border-slate-300 rounded-lg p-2.5" placeholder="e.g. Manisha Bhatt, Aditya Mishra">
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Work Email (Optional)</label>
+          <input type="email" id="addUserEmail" class="w-full border border-slate-300 rounded-lg p-2.5" placeholder="e.g. name@cybermedia.co.in">
+          <span class="text-[10px] text-slate-400 block mt-0.5">Auto-generated from name if left empty</span>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Role</label>
+          <select id="addUserRole" class="w-full border border-slate-300 rounded-lg p-2.5 bg-white">
+            <option value="member" selected>Member / Executive</option>
+            <option value="manager">Manager / Lead</option>
+          </select>
+        </div>
+        <div class="flex justify-end space-x-2 pt-2">
+          <button type="button" onclick="closeModal('addUserModal')" class="px-3.5 py-2 border border-slate-200 rounded-lg text-slate-600 font-semibold hover:bg-slate-50">Cancel</button>
+          <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-xs">Add Member</button>
         </div>
       </form>
     </div>
