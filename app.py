@@ -351,12 +351,17 @@ def profile_endpoint():
                 conn.close()
                 return jsonify({"error": "Cannot delete the sole manager account."}), 400
 
-        # Unassign or nullify references to avoid foreign key violations and preserve history
+        # Find another active user or manager to reassign reported issues to (since issues.reporter_id is NOT NULL)
+        fallback_user = conn.execute("SELECT id FROM users WHERE id != ? ORDER BY CASE WHEN role = 'manager' THEN 0 ELSE 1 END, id ASC LIMIT 1", (user_id,)).fetchone()
+        fallback_id = fallback_user["id"] if fallback_user else None
+
+        # Unassign assignee_id (nullable) and reassign reporter_id (not null)
         conn.execute("UPDATE issues SET assignee_id = NULL WHERE assignee_id = ?", (user_id,))
-        conn.execute("UPDATE issues SET reporter_id = NULL WHERE reporter_id = ?", (user_id,))
+        if fallback_id:
+            conn.execute("UPDATE issues SET reporter_id = ? WHERE reporter_id = ?", (fallback_id, user_id))
         conn.execute("UPDATE projects SET created_by = NULL WHERE created_by = ?", (user_id,))
         conn.execute("UPDATE worklogs SET reviewed_by = NULL WHERE reviewed_by = ?", (user_id,))
-        # Also delete or unassign worklogs
+        # Also clean up the user's worklogs and delete the user account
         conn.execute("DELETE FROM worklogs WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
         conn.commit()

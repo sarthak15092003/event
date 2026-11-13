@@ -79,8 +79,13 @@ app.delete('/api/profile', authenticate, (req, res) => {
       }
     }
 
+    const fallbackUser = db.prepare("SELECT id FROM users WHERE id != ? ORDER BY CASE WHEN role = 'manager' THEN 0 ELSE 1 END, id ASC LIMIT 1").get(userId);
+    const fallbackId = fallbackUser ? fallbackUser.id : null;
+
     db.prepare('UPDATE issues SET assignee_id = NULL WHERE assignee_id = ?').run(userId);
-    db.prepare('UPDATE issues SET reporter_id = NULL WHERE reporter_id = ?').run(userId);
+    if (fallbackId) {
+      db.prepare('UPDATE issues SET reporter_id = ? WHERE reporter_id = ?').run(fallbackId, userId);
+    }
     db.prepare('UPDATE projects SET created_by = NULL WHERE created_by = ?').run(userId);
     db.prepare('UPDATE worklogs SET reviewed_by = NULL WHERE reviewed_by = ?').run(userId);
     db.prepare('DELETE FROM worklogs WHERE user_id = ?').run(userId);
