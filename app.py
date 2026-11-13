@@ -742,6 +742,9 @@ def analytics_summary():
     })
 
 # ----------------- SHEET AUTOMATION & SYNC ENDPOINTS -----------------
+# Default password to protect synchronization operations
+SYNC_ACCESS_PASSWORD = os.getenv("SYNC_ACCESS_PASSWORD", "cybermedia@2026")
+
 @app.route("/api/sync/status", methods=["GET"])
 def get_sync_status():
     conn = get_db()
@@ -753,9 +756,13 @@ def get_sync_status():
 def trigger_sync():
     global ENABLE_SHEET_SYNC
     data = request.json or {}
+    password = data.get("password", "").strip()
+    if password != SYNC_ACCESS_PASSWORD:
+        return jsonify({"status": "error", "message": "Incorrect sync password. Access denied."}), 403
+
     sheet_url = data.get("sheet_url")
     force = data.get("force", False)
-    # If user explicitly clicked Sync Now or enabled sync, allow execution
+    # If password is correct, execute sync
     result = sync_from_sheet(sheet_url, force=force)
     return jsonify(result)
 
@@ -763,6 +770,10 @@ def trigger_sync():
 def update_sync_settings():
     global ENABLE_SHEET_SYNC
     data = request.json or {}
+    password = data.get("password", "").strip()
+    if password != SYNC_ACCESS_PASSWORD:
+        return jsonify({"error": "Incorrect sync password. Access denied."}), 403
+
     sheet_url = data.get("sheet_url", DEFAULT_SHEET_URL)
     enabled = 1 if data.get("auto_sync_enabled") else 0
     ENABLE_SHEET_SYNC = bool(enabled)

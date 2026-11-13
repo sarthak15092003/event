@@ -744,46 +744,93 @@ function updateSyncToggleUI() {
   }
 }
 
-async function toggleSyncMasterState() {
-  const newState = !isSyncActive;
+let pendingSyncAction = null; // 'toggle' or 'trigger'
+
+function openSyncPasswordModal(action) {
+  pendingSyncAction = action;
+  const input = document.getElementById('syncPasswordInput');
+  const errorEl = document.getElementById('syncPasswordError');
+  const promptEl = document.getElementById('syncPasswordPrompt');
+  if (input) input.value = '';
+  if (errorEl) {
+    errorEl.textContent = '';
+    errorEl.classList.add('hidden');
+  }
+  if (promptEl) {
+    promptEl.textContent = action === 'toggle' 
+      ? `Enter admin password to ${isSyncActive ? 'pause' : 'activate'} sheet synchronization:` 
+      : 'Enter admin password to trigger instant sheet sync:';
+  }
+  openModal('syncPasswordModal');
+  setTimeout(() => { if (input) input.focus(); }, 150);
+}
+
+async function handleSyncPasswordSubmit(e) {
+  e.preventDefault();
+  const password = document.getElementById('syncPasswordInput').value;
+  const errorEl = document.getElementById('syncPasswordError');
+  const submitBtn = document.getElementById('syncPasswordSubmitBtn');
+
+  if (submitBtn) submitBtn.disabled = true;
+
   try {
-    const res = await fetch('/api/sync/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ auto_sync_enabled: newState ? 1 : 0 })
-    });
-    if (res.ok) {
-      isSyncActive = newState;
-      updateSyncToggleUI();
-      showToast(isSyncActive ? 'Google Sheet synchronization activated!' : 'Sheet synchronization paused.');
+    if (pendingSyncAction === 'toggle') {
+      const newState = !isSyncActive;
+      const res = await fetch('/api/sync/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auto_sync_enabled: newState ? 1 : 0, password })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        closeModal('syncPasswordModal');
+        isSyncActive = newState;
+        updateSyncToggleUI();
+        showToast(isSyncActive ? 'Google Sheet synchronization activated!' : 'Sheet synchronization paused.');
+      } else {
+        if (errorEl) {
+          errorEl.textContent = data.error || 'Incorrect password. Access denied.';
+          errorEl.classList.remove('hidden');
+        }
+      }
+    } else if (pendingSyncAction === 'trigger') {
+      const icon = document.getElementById('syncIcon');
+      if (icon) icon.classList.add('fa-spin');
+      const res = await fetch('/api/sync/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'success') {
+        closeModal('syncPasswordModal');
+        showToast('All deliverables synchronized successfully!');
+        await loadUsers();
+        await loadIssues();
+      } else {
+        if (errorEl) {
+          errorEl.textContent = data.message || data.error || 'Incorrect password. Access denied.';
+          errorEl.classList.remove('hidden');
+        }
+      }
+      if (icon) icon.classList.remove('fa-spin');
     }
   } catch (err) {
-    showToast('Failed to toggle sync state', true);
+    if (errorEl) {
+      errorEl.textContent = 'Network or server error occurred.';
+      errorEl.classList.remove('hidden');
+    }
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
   }
 }
 
+async function toggleSyncMasterState() {
+  openSyncPasswordModal('toggle');
+}
+
 async function triggerSheetSync() {
-  const icon = document.getElementById('syncIcon');
-  if (icon) icon.classList.add('fa-spin');
-  try {
-    const res = await fetch('/api/sync/trigger', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({})
-    });
-    const data = await res.json();
-    if (data.status === 'success') {
-      showToast('All deliverables synchronized successfully!');
-      await loadUsers();
-      await loadIssues();
-    } else {
-      showToast(data.message || 'Sync encountered an issue', true);
-    }
-  } catch (err) {
-    showToast('Sync error', true);
-  } finally {
-    if (icon) icon.classList.remove('fa-spin');
-  }
+  openSyncPasswordModal('trigger');
 }
 
 async function saveSyncSettings(e) {
