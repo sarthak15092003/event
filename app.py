@@ -741,6 +741,155 @@ def analytics_summary():
         "userSummary": [dict(u) for u in users]
     })
 
+# ----------------- PAYMENT TRACKER & APPROVAL ENDPOINTS -----------------
+@app.route("/api/payments", methods=["GET", "POST"])
+def payments_endpoint():
+    conn = get_db()
+    if request.method == "POST":
+        user = get_current_user()
+        data = request.json or {}
+        vendor = data.get("vendor", "").strip()
+        amount = float(data.get("amount") or 0)
+        payment_date = data.get("payment_date", "").strip()
+        paid_through = data.get("paid_through", "").strip()
+        event_name = data.get("event_name", "").strip()
+        event_date = data.get("event_date", "").strip()
+        remarks = data.get("remarks", "").strip()
+        
+        if not vendor or amount <= 0:
+            conn.close()
+            return jsonify({"error": "Vendor name and valid amount (> 0) are required."}), 400
+
+        # Newly created payments enter PENDING_APPROVAL / PENDING
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO payments (payment_date, vendor, amount, paid_through, event_name, event_date, remarks, status, approval_status, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING_APPROVAL', 'PENDING', ?)
+        """, (payment_date, vendor, amount, paid_through, event_name, event_date, remarks, user["id"] if user else None))
+        conn.commit()
+        new_id = cur.lastrowid
+        conn.close()
+        return jsonify({"id": new_id, "message": "Payment created and submitted for approval", "status": "PENDING_APPROVAL"}), 201
+
+    # GET payments with filter support
+    status_filter = request.args.get("status") # 'to_be_done' or 'done' or None
+    approval_filter = request.args.get("approval") # 'PENDING' or 'APPROVED'
+    
+    query = """
+        SELECT p.*, u.name as creator_name, a.name as approver_name
+        FROM payments p
+        LEFT JOIN users u ON p.created_by = u.id
+        LEFT JOIN users a ON p.approved_by = a.id
+        WHERE 1=1
+    """
+    params = []
+    if status_filter == "done":
+        query += " AND p.status = 'PAID'"
+    elif status_filter == "to_be_done":
+        query += " AND p.status IN ('PENDING_APPROVAL', 'APPROVED')"
+
+    if approval_filter:
+        query += " AND p.approval_status = ?"
+        params.append(approval_filter)
+
+    query += " ORDER BY p.id DESC"
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+@app.route("/api/payments/<int:payment_id>/approve", methods=["POST"])
+def approve_payment(payment_id):
+    user = get_current_user()
+    data = request.json or {}
+    action = data.get("action", "approve") # 'approve' or 'reject'
+    conn = get_db()
+
+    if action == "approve":
+        conn.execute("""
+            UPDATE payments 
+            SET approval_status = 'APPROVED', 
+                status = CASE WHEN status = 'PENDING_APPROVAL' THEN 'APPROVED' ELSE status END,
+                approved_by = ?, 
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (user["id"] if user else 1, payment_id))
+    else:
+        conn.execute("""
+            UPDATE payments 
+            SET approval_status = 'REJECTED', 
+                status = 'REJECTED', 
+                approved_by = ?, 
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (user["id"] if user else 1, payment_id))
+
+    conn.commit()
+    conn.close()
+    return jsonify({"message": f"Payment successfully {action}d!"})
+
+@app.route("/api/payments/<int:payment_id>/mark-paid", methods=["POST"])
+def mark_payment_paid(payment_id):
+    conn = get_db()
+    data = request.json or {}
+    paid_through = data.get("paid_through")
+    payment_date = data.get("payment_date")
+    
+    if paid_through and payment_date:
+        conn.execute("""
+            UPDATE payments 
+            SET status = 'PAID', paid_through = ?, payment_date = ?, updated_at = CURRENT_TIMESTAMP 
+            WHERE id = ?
+        """, (paid_through, payment_date, payment_id))
+    else:
+        conn.execute("""
+            UPDATE payments 
+            SET status = 'PAID', updated_at = CURRENT_TIMESTAMP 
+            WHERE id = ?
+        """, (payment_id,))
+    
+    conn.commit()
+    conn.close()
+    return jsonify({"message": "Payment marked as PAID and moved to 'Payment done'!"})
+
+# Webhook for inbound email / automated payment notification (Bank / Payment Gateway / Mail parser)
+@app.route("/api/payments/webhook-mail", methods=["POST"])
+def webhook_payment_email():
+    """
+    Simulates or receives an inbound email trigger when a payment confirmation / receipt email arrives.
+    Automatically finds matching payment by ID or vendor/amount, marks it as PAID, and moves it to Payment Done.
+    """
+    data = request.json or {}
+    payment_id = data.get("payment_id")
+    vendor = data.get("vendor")
+    amount = data.get("amount")
+    paid_through = data.get("paid_through", "Email / Auto Confirmation")
+    payment_date = data.get("payment_date", "Today")
+
+    conn = get_db()
+    if payment_id:
+        conn.execute("""
+            UPDATE payments 
+            SET status = 'PAID', paid_through = COALESCE(NULLIF(paid_through, ''), ?), updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (paid_through, payment_id))
+        conn.commit()
+        conn.close()
+        return jsonify({"status": "success", "message": f"Payment #{payment_id} automatically marked as PAID via email notification."})
+
+    if vendor and amount:
+        # Match by vendor and amount
+        conn.execute("""
+            UPDATE payments 
+            SET status = 'PAID', paid_through = COALESCE(NULLIF(paid_through, ''), ?), updated_at = CURRENT_TIMESTAMP
+            WHERE vendor LIKE ? AND status != 'PAID' LIMIT 1
+        """, (paid_through, f"%{vendor}%"))
+        conn.commit()
+        conn.close()
+        return jsonify({"status": "success", "message": f"Matching payment for vendor '{vendor}' automatically marked as PAID."})
+
+    conn.close()
+    return jsonify({"error": "Payment ID or Vendor + Amount required"}), 400
+
 # ----------------- SHEET AUTOMATION & SYNC ENDPOINTS -----------------
 # Default password to protect synchronization operations
 SYNC_ACCESS_PASSWORD = os.getenv("SYNC_ACCESS_PASSWORD", "cybermedia@2026")

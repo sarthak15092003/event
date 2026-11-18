@@ -161,7 +161,7 @@ function updateUserUI() {
 
 // Navigation Switcher
 function switchNav(viewId) {
-  ['my-tasks', 'all-deliverables', 'manager', 'automation', 'profile'].forEach(id => {
+  ['my-tasks', 'all-deliverables', 'manager', 'payment-tracker', 'automation', 'profile'].forEach(id => {
     const view = document.getElementById(`view-${id}`);
     const sideBtn = document.getElementById(`side-${id}`);
     if (id === viewId) {
@@ -180,6 +180,7 @@ function switchNav(viewId) {
   if (viewId === 'my-tasks') renderWorkbenchDeliverables();
   if (viewId === 'all-deliverables') renderBoard();
   if (viewId === 'manager') loadManagerData();
+  if (viewId === 'payment-tracker') loadPayments();
 }
 
 async function loadIssues() {
@@ -1199,6 +1200,312 @@ function openLogWorkFromTaskDetail() {
   if (currentSelectedTaskId) {
     closeModal('taskDetailModal');
     openLogWorkModal(currentSelectedTaskId);
+  }
+}
+
+// ----------------- PAYMENT TRACKER & APPROVAL WORKFLOW -----------------
+let allPayments = [];
+let currentPaymentSubtab = 'to-be-done'; // 'to-be-done', 'done', 'approvals'
+
+function switchPaymentSubtab(subtab) {
+  currentPaymentSubtab = subtab;
+  ['to-be-done', 'done', 'approvals'].forEach(tab => {
+    const btn = document.getElementById(`payTabBtn-${tab}`);
+    if (tab === subtab) {
+      if (btn) btn.className = 'pb-3 text-xs font-bold border-b-2 border-emerald-600 text-emerald-700 flex items-center space-x-2';
+    } else {
+      if (btn) btn.className = 'pb-3 text-xs font-medium text-slate-500 hover:text-slate-800 border-b-2 border-transparent flex items-center space-x-2';
+    }
+  });
+  renderPaymentsTable();
+}
+
+async function loadPayments() {
+  try {
+    const res = await fetch('/api/payments');
+    if (res.ok) {
+      allPayments = await res.json();
+      updatePaymentKpis();
+      renderPaymentsTable();
+      updateEmailPaymentModalSelect();
+    }
+  } catch (err) {
+    console.error('Error loading payments:', err);
+  }
+}
+
+function updatePaymentKpis() {
+  const totalCount = allPayments.length;
+  const totalAmount = allPayments.reduce((s, p) => s + (p.amount || 0), 0);
+
+  const pending = allPayments.filter(p => p.approval_status === 'PENDING');
+  const pendingCount = pending.length;
+  const pendingAmount = pending.reduce((s, p) => s + (p.amount || 0), 0);
+
+  // Payment to be done: approved but not yet paid
+  const toBeDone = allPayments.filter(p => p.status !== 'PAID' && p.approval_status !== 'REJECTED');
+  const toBeDoneCount = toBeDone.length;
+  const toBeDoneAmount = toBeDone.reduce((s, p) => s + (p.amount || 0), 0);
+
+  // Payment done: status is PAID
+  const done = allPayments.filter(p => p.status === 'PAID');
+  const doneCount = done.length;
+  const doneAmount = done.reduce((s, p) => s + (p.amount || 0), 0);
+
+  const kpiTotal = document.getElementById('paymentKpiTotalCount');
+  if (kpiTotal) kpiTotal.textContent = totalCount;
+  const kpiTotalAmt = document.getElementById('paymentKpiTotalAmount');
+  if (kpiTotalAmt) kpiTotalAmt.textContent = `₹${totalAmount.toLocaleString('en-IN')}`;
+
+  const kpiPending = document.getElementById('paymentKpiPendingCount');
+  if (kpiPending) kpiPending.textContent = pendingCount;
+  const kpiPendingAmt = document.getElementById('paymentKpiPendingAmount');
+  if (kpiPendingAmt) kpiPendingAmt.textContent = `₹${pendingAmount.toLocaleString('en-IN')}`;
+
+  const kpiApproved = document.getElementById('paymentKpiApprovedCount');
+  if (kpiApproved) kpiApproved.textContent = toBeDoneCount;
+  const kpiApprovedAmt = document.getElementById('paymentKpiApprovedAmount');
+  if (kpiApprovedAmt) kpiApprovedAmt.textContent = `₹${toBeDoneAmount.toLocaleString('en-IN')}`;
+
+  const kpiDone = document.getElementById('paymentKpiDoneCount');
+  if (kpiDone) kpiDone.textContent = doneCount;
+  const kpiDoneAmt = document.getElementById('paymentKpiDoneAmount');
+  if (kpiDoneAmt) kpiDoneAmt.textContent = `₹${doneAmount.toLocaleString('en-IN')}`;
+
+  // Badges
+  const b1 = document.getElementById('payCountBadgeToBeDone');
+  if (b1) b1.textContent = toBeDoneCount;
+  const b2 = document.getElementById('payCountBadgeDone');
+  if (b2) b2.textContent = doneCount;
+  const b3 = document.getElementById('payCountBadgeApprovals');
+  if (b3) b3.textContent = pendingCount;
+
+  // Sidebar badge
+  const sideBadge = document.getElementById('sidebarPaymentPendingBadge');
+  if (sideBadge) {
+    if (pendingCount > 0) {
+      sideBadge.textContent = pendingCount;
+      sideBadge.classList.remove('hidden');
+    } else {
+      sideBadge.classList.add('hidden');
+    }
+  }
+}
+
+function renderPaymentsTable() {
+  const tbody = document.getElementById('paymentTableBody');
+  const emptyState = document.getElementById('paymentEmptyState');
+  if (!tbody) return;
+
+  let filtered = [];
+  if (currentPaymentSubtab === 'to-be-done') {
+    filtered = allPayments.filter(p => p.status !== 'PAID' && p.approval_status !== 'REJECTED');
+  } else if (currentPaymentSubtab === 'done') {
+    filtered = allPayments.filter(p => p.status === 'PAID');
+  } else if (currentPaymentSubtab === 'approvals') {
+    filtered = allPayments.filter(p => p.approval_status === 'PENDING');
+  }
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '';
+    if (emptyState) emptyState.classList.remove('hidden');
+    return;
+  }
+  if (emptyState) emptyState.classList.add('hidden');
+
+  tbody.innerHTML = filtered.map(p => {
+    let approvalBadge = '';
+    if (p.approval_status === 'APPROVED') {
+      approvalBadge = '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800"><i class="fa-solid fa-check mr-1"></i> Approved</span>';
+    } else if (p.approval_status === 'REJECTED') {
+      approvalBadge = '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800"><i class="fa-solid fa-xmark mr-1"></i> Rejected</span>';
+    } else {
+      approvalBadge = '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800"><i class="fa-solid fa-clock mr-1"></i> Pending</span>';
+    }
+
+    let statusBadge = '';
+    if (p.status === 'PAID') {
+      statusBadge = '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800"><i class="fa-solid fa-circle-check mr-1"></i> Paid</span>';
+    } else if (p.status === 'APPROVED') {
+      statusBadge = '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800"><i class="fa-solid fa-hourglass-half mr-1"></i> Ready for Payment</span>';
+    } else {
+      statusBadge = '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">Awaiting Approval</span>';
+    }
+
+    let actionButtons = '';
+    if (p.approval_status === 'PENDING') {
+      actionButtons = `
+        <div class="flex items-center justify-end space-x-1.5">
+          <button onclick="approveOrRejectPayment(${p.id}, 'approve')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[11px] shadow-xs flex items-center">
+            <i class="fa-solid fa-check mr-1"></i> Approve
+          </button>
+          <button onclick="approveOrRejectPayment(${p.id}, 'reject')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded font-semibold text-[11px] border border-rose-200">
+            Reject
+          </button>
+        </div>
+      `;
+    } else if (p.status !== 'PAID') {
+      actionButtons = `
+        <div class="flex items-center justify-end space-x-1.5">
+          <button onclick="markPaymentPaidManually(${p.id})" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-[11px] shadow-xs flex items-center">
+            <i class="fa-solid fa-check-double mr-1"></i> Mark Paid
+          </button>
+        </div>
+      `;
+    } else {
+      actionButtons = `
+        <span class="text-[11px] text-emerald-600 font-bold flex items-center justify-end">
+          <i class="fa-solid fa-circle-check mr-1"></i> Settled
+        </span>
+      `;
+    }
+
+    return `
+      <tr class="hover:bg-slate-50 transition border-b border-slate-100">
+        <td class="py-3 px-3 font-semibold text-slate-800">${escapeHtml(p.payment_date || '-')}</td>
+        <td class="py-3 px-3">
+          <div class="font-bold text-slate-900">${escapeHtml(p.vendor)}</div>
+          ${p.remarks ? `<div class="text-[10px] text-slate-400 mt-0.5 truncate max-w-xs">${escapeHtml(p.remarks)}</div>` : ''}
+        </td>
+        <td class="py-3 px-3 font-mono font-bold text-slate-900">₹${Number(p.amount).toLocaleString('en-IN')}</td>
+        <td class="py-3 px-3 text-slate-600">${escapeHtml(p.paid_through || '-')}</td>
+        <td class="py-3 px-3 text-slate-800 font-medium">${escapeHtml(p.event_name || '-')}</td>
+        <td class="py-3 px-3 text-slate-500">${escapeHtml(p.event_date || '-')}</td>
+        <td class="py-3 px-3">${approvalBadge}</td>
+        <td class="py-3 px-3">${statusBadge}</td>
+        <td class="py-3 px-3 text-right">${actionButtons}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function openNewPaymentModal() {
+  document.getElementById('payInputVendor').value = '';
+  document.getElementById('payInputAmount').value = '';
+  document.getElementById('payInputDate').value = '';
+  document.getElementById('payInputPaidThrough').value = '';
+  document.getElementById('payInputEventName').value = '';
+  document.getElementById('payInputEventDate').value = '';
+  document.getElementById('payInputRemarks').value = '';
+  openModal('newPaymentModal');
+}
+
+async function submitNewPayment(e) {
+  e.preventDefault();
+  const vendor = document.getElementById('payInputVendor').value.trim();
+  const amount = parseFloat(document.getElementById('payInputAmount').value);
+  const payment_date = document.getElementById('payInputDate').value.trim();
+  const paid_through = document.getElementById('payInputPaidThrough').value.trim();
+  const event_name = document.getElementById('payInputEventName').value.trim();
+  const event_date = document.getElementById('payInputEventDate').value.trim();
+  const remarks = document.getElementById('payInputRemarks').value.trim();
+
+  const btn = document.getElementById('newPaymentSubmitBtn');
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await fetch('/api/payments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
+      body: JSON.stringify({ vendor, amount, payment_date, paid_through, event_name, event_date, remarks })
+    });
+    if (res.ok) {
+      closeModal('newPaymentModal');
+      showToast('Payment request created and submitted for approval!');
+      await loadPayments();
+    } else {
+      const data = await res.json();
+      showToast(data.error || 'Failed to submit payment', true);
+    }
+  } catch (err) {
+    showToast('Network error submitting payment', true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function approveOrRejectPayment(id, action) {
+  try {
+    const res = await fetch(`/api/payments/${id}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
+      body: JSON.stringify({ action })
+    });
+    if (res.ok) {
+      showToast(action === 'approve' ? 'Payment Approved! Moved to "Payment to be done".' : 'Payment Rejected.');
+      await loadPayments();
+    } else {
+      showToast('Failed to process approval', true);
+    }
+  } catch (err) {
+    showToast('Network error during approval', true);
+  }
+}
+
+async function markPaymentPaidManually(id) {
+  const method = prompt('Confirm payment method/source (e.g. NEFT, Company Card, UPI):', 'NEFT');
+  if (method === null) return;
+
+  try {
+    const res = await fetch(`/api/payments/${id}/mark-paid`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
+      body: JSON.stringify({ paid_through: method, payment_date: 'Today' })
+    });
+    if (res.ok) {
+      showToast('Payment marked as PAID and moved to "Payment done"!');
+      await loadPayments();
+    } else {
+      showToast('Failed to mark payment as paid', true);
+    }
+  } catch (err) {
+    showToast('Network error updating payment', true);
+  }
+}
+
+function updateEmailPaymentModalSelect() {
+  const select = document.getElementById('emailPaymentSelect');
+  if (!select) return;
+  const pendingOrApproved = allPayments.filter(p => p.status !== 'PAID');
+  if (pendingOrApproved.length === 0) {
+    select.innerHTML = '<option value="">No pending payments available</option>';
+  } else {
+    select.innerHTML = pendingOrApproved.map(p => `
+      <option value="${p.id}">${escapeHtml(p.vendor)} - ₹${Number(p.amount).toLocaleString('en-IN')} (${p.event_name || 'Event'})</option>
+    `).join('');
+  }
+}
+
+function simulateInboundEmailModal() {
+  updateEmailPaymentModalSelect();
+  openModal('emailPaymentModal');
+}
+
+async function submitEmailPaymentWebhook(e) {
+  e.preventDefault();
+  const payment_id = document.getElementById('emailPaymentSelect').value;
+  const paid_through = document.getElementById('emailPaidThrough').value;
+  if (!payment_id) {
+    showToast('Select a payment first', true);
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/payments/webhook-mail', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payment_id: parseInt(payment_id), paid_through })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      closeModal('emailPaymentModal');
+      showToast(data.message || 'Payment marked as PAID via Email confirmation!');
+      await loadPayments();
+    } else {
+      showToast(data.error || 'Failed to trigger email webhook', true);
+    }
+  } catch (err) {
+    showToast('Network error processing webhook', true);
   }
 }
 
