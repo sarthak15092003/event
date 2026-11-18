@@ -161,7 +161,7 @@ function updateUserUI() {
 
 // Navigation Switcher
 function switchNav(viewId) {
-  ['my-tasks', 'all-deliverables', 'manager', 'payment-tracker', 'automation', 'profile'].forEach(id => {
+  ['my-tasks', 'all-deliverables', 'manager', 'payment-tracker', 'profile'].forEach(id => {
     const view = document.getElementById(`view-${id}`);
     const sideBtn = document.getElementById(`side-${id}`);
     if (id === viewId) {

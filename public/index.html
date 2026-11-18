@@ -127,10 +127,6 @@
               </div>
               <span id="sidebarPaymentPendingBadge" class="hidden bg-emerald-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold"></span>
             </button>
-            <button onclick="switchNav('automation')" id="side-automation" class="w-full text-left px-3 py-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 flex items-center space-x-2.5 transition">
-              <i class="fa-solid fa-bolt text-sm text-cyan-500"></i>
-              <span>Sheet Automation</span>
-            </button>
             <button onclick="switchNav('profile')" id="side-profile" class="w-full text-left px-3 py-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 flex items-center space-x-2.5 transition">
               <i class="fa-solid fa-id-badge text-sm text-pink-500"></i>
               <span>Profile & Password</span>
@@ -476,30 +472,6 @@
               <div class="text-sm font-semibold text-slate-600">No payment records found in this view</div>
             </div>
           </div>
-        </div>
-      </section>
-
-      <!-- VIEW 4: SHEET AUTOMATION -->
-      <section id="view-automation" class="hidden space-y-4 max-w-2xl">
-        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-          <h2 class="text-lg font-bold text-slate-900 flex items-center">
-            <i class="fa-solid fa-bolt text-cyan-600 mr-2"></i> Live Google Sheet Synchronization
-          </h2>
-          <form onsubmit="saveSyncSettings(event)" class="space-y-4 text-xs">
-            <div>
-              <label class="block font-semibold text-slate-700 mb-1">Spreadsheet URL</label>
-              <input type="text" id="autoSheetUrl" required class="w-full border border-slate-300 rounded-lg p-2.5 font-mono text-xs">
-            </div>
-            <div class="flex items-center space-x-3">
-              <label class="inline-flex items-center cursor-pointer">
-                <input type="checkbox" id="autoSyncCheckbox" checked class="form-checkbox h-4 w-4 text-blue-600 rounded">
-                <span class="ml-2 font-medium text-slate-700">Enable Automated Polling (every 10 min)</span>
-              </label>
-            </div>
-            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-xl transition">
-              Save Settings
-            </button>
-          </form>
         </div>
       </section>
 
