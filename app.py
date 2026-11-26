@@ -146,7 +146,7 @@ def map_sheet_status(sheet_status):
 
 # Global Master Switch for Sheet Synchronization
 # Set to True whenever you want to re-enable Google Sheet sync from code
-ENABLE_SHEET_SYNC = False
+ENABLE_SHEET_SYNC = True
 
 OPERATIONAL_TABS = [
     {"name": "Event & Operation", "gid": "2041394632", "key": "EVT"},
