@@ -45,9 +45,10 @@ def sync_all_operational_tabs():
             c.execute("SELECT id FROM users WHERE email = ?", (email,))
             user_map[name.lower()] = c.fetchone()["id"]
 
-    # Clear previous worklogs and issues
+    # Clear previous worklogs and issues and commit immediately
     c.execute("DELETE FROM worklogs")
     c.execute("DELETE FROM issues")
+    conn.commit()
 
     total_tasks_synced = 0
 
@@ -136,6 +137,7 @@ def sync_all_operational_tabs():
             last_sync_count = ?
         WHERE id = 1
     """, (total_tasks_synced,))
+    conn.commit()
 
     print(f"\nALL 5 OPERATIONAL TABS SYNCED: Total {total_tasks_synced} tasks.")
     conn.close()
